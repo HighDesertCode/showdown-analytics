@@ -1,0 +1,24 @@
+# Project Overview
+
+Showdown Analytics collects and analyzes competitive Pokémon data from Smogon and Pokémon Showdown, starting with Gen 9 Monotype. It stores monthly statistics, reference data, public replays, and private research in PostgreSQL, and will expose source-attributed analytics through a public API and website (including for ChatGPT).
+
+See `REPORT.md` for research context and data interpretation. Always preserve source provenance, reporting periods, weighting baselines, team-type scopes, and metric denominators. Keep public replay samples distinct from ladder-wide statistics, and unknown battle information distinct from inferred facts.
+
+# Infrastructure
+
+All services run on DigitalOcean. Notion is used separately for personal notes. This is the intended architecture; only what `docs/database-architecture.md` lists as deployed actually exists. Stay within the current milestone (M1: database foundation).
+
+- **Database:** Managed PostgreSQL. Project data goes in `showdown-database` via `showdown-analyst`; never use `defaultdb` or infer the database/user from cluster defaults. Schema changes go through SQL migrations run by a separate DDL-privileged account.
+- **Developer access:** Tailscale subnet router on a Droplet in the database VPC, plus trusted sources and TLS with certificate verification.
+- **Planned:** Spaces (raw archives), Python collectors run locally then on App Platform (with scheduling), a read-only FastAPI service, a Streamlit site consuming that API, and private research storage that is never reachable from public endpoints.
+
+**Terraform:** Create services manually, write matching configuration, `terraform import`, and confirm a no-change plan before managing changes through Terraform. Keep state outside Git; never commit state, plans, credentials, or secret variable files.
+
+**Security:** Least-privilege roles, private networking, and verified TLS. Never commit or log secrets; use environment variables and placeholder-only example files.
+
+# Git Strategy
+
+- **The user runs all Git commands.** Never execute Git (including read-only commands like `git status` or `git diff`), directly or indirectly, and never use GitHub tools, the `gh` CLI, or APIs to branch, commit, push, open, or merge PRs. Provide exact commands, explain them, and wait for output when needed.
+- One focused branch and PR per coherent change, targeting `main`. Use **Conventional Commits** (`type(scope): description`) for commits and PR titles, and **squash and merge**. Write PR descriptions that work as the squash commit body: change summary, issue references, validation, and limitations.
+- **Never add `Co-authored-by:` or any co-author attribution** to commits, squash messages, PR descriptions, or suggested commands.
+- Keep issues concise: at most three bullet points covering scope and acceptance criteria.

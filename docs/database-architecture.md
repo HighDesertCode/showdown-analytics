@@ -1,10 +1,6 @@
 # Database Architecture
 
-Overview for [issue #1](https://github.com/HighDesertCode/showdown-analytics/issues/1). PostgreSQL is deployed on DigitalOcean; the application schemas and management workflows below describe the planned foundation. See [REPORT.md](../REPORT.md) for source research.
-
 ## Deployed Database
-
-Configuration inspected with `doctl` on October 24, 2026:
 
 | Setting | Current configuration |
 | --- | --- |
@@ -16,12 +12,14 @@ Configuration inspected with `doctl` on October 24, 2026:
 | Nodes | 1 |
 | Storage | 10 GiB (10,240 MiB) |
 | Status | Online |
-| Logical databases | `defaultdb` |
+| Project database | `showdown-database` |
+| Project user | `showdown-analyst` |
+| Default database | `defaultdb`; not used by the project |
 | Networking | Assigned VPC; public and private connection endpoints available |
 | Connection encryption | SSL required according to cluster metadata |
 | Trusted sources | Droplet `tailscale-virtual-machine` (ID `612370828`) |
 
-This inspection covers cluster metadata, logical database names, and firewall rules. Application tables, SQL grants, client certificate verification, backups, and Terraform state have not been verified.
+`showdown-database` was recreated empty on October 25, 2026. Backups and Terraform adoption remain unverified.
 
 ## Schemas
 
@@ -76,9 +74,9 @@ The planned data model follows these conventions:
 
 ## Infrastructure and Access
 
-Managed PostgreSQL is the deployed relational store. The planned supporting services are DigitalOcean Spaces for raw archives, App Platform for collectors, the Streamlit application and public API, and local PostgreSQL for development. Issue #2 covers the initial Streamlit configuration alongside local database and migration tooling; public deployment remains later work.
+Managed PostgreSQL is the deployed relational store. DigitalOcean Spaces archival and App Platform deployment remain planned. The future Streamlit application consumes the read-only API rather than connecting directly to PostgreSQL; application setup follows the API work.
 
-The deployed access Droplet is `tailscale-virtual-machine`, with private address `10.120.0.4`, in the database's `default-sfo2` VPC (`10.120.0.0/20`). It is configured as a database trusted source, and the user reports it has joined the tailnet. Subnet routing and end-to-end database access remain unverified.
+The deployed access Droplet is `tailscale-virtual-machine`, with private address `10.120.0.4`, in the database's `default-sfo2` VPC (`10.120.0.0/20`). It is a database trusted source and has joined the tailnet. Private connectivity through the subnet router has been verified.
 
 The intended connection path is Mac → Tailscale subnet router → PostgreSQL private endpoint. Approved routes and tailnet access rules limit destinations and ports. Default subnet-router source NAT makes forwarded connections originate from the router; database TLS still verifies the database hostname. Sources: [Tailscale subnet routers](https://tailscale.com/kb/1019/subnets) and [DigitalOcean PostgreSQL connectivity](https://docs.digitalocean.com/products/databases/postgresql/how-to/connect/).
 
@@ -91,4 +89,4 @@ The intended access model separates migration, ingestion, public read-only, and 
 
 The Terraform workflow adopts manually created services through matching resource definitions and `terraform import`. A refreshed plan showing no changes establishes configuration parity for managed attributes. Remote state is kept outside Git with restricted access and a documented locking approach. Unsupported resources and cloud-managed database users have explicit ownership to prevent conflicts with SQL migrations. Terraform adoption is planned; it was not verified during this inspection.
 
-The planned SQL migration workflow applies versioned changes in order and records completed versions. Validation covers fresh builds, upgrades, constraints, and permissions. Tool selection and runnable local setup belong to issue #2.
+SQL organization and execution tooling will be revisited incrementally as implementation restarts.
