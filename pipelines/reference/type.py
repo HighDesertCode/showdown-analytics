@@ -13,4 +13,4 @@ def rows(typechart: dict) -> list[tuple[str, str]]:
 
 
 def load(conn: Connection, typechart: dict) -> int:
-    return insert_new(conn, "type", ["showdown_id", "name"], rows(typechart))
+    return len(insert_new(conn, "type", ["showdown_id", "name"], rows(typechart)))

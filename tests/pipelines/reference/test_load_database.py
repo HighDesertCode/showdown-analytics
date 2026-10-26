@@ -1,10 +1,14 @@
 """Runs the reference loaders against real tables built from sql/ (see tests/pipelines/conftest.py)."""
 
+import copy
+from typing import Any
+
 from pipelines.reference import load
 from pipelines.reference import type as type_loader
 
 STATS = {"hp": 100, "atk": 110, "def": 90, "spa": 85, "spd": 90, "spe": 60}
-SOURCES = {
+# Typed loosely, like the parsed Showdown JSON it stands in for.
+SOURCES: dict[str, dict[str, Any]] = {
     "types": {"water": {}, "ground": {}, "electric": {}, "stellar": {}},
     "abilities": {
         "torrent": {"name": "Torrent", "num": 67},
@@ -121,3 +125,35 @@ def test_rerun_inserts_nothing_and_uses_no_ids(conn):
 
     assert set(counts.values()) == {0}
     assert max_type_id is not None and fire == (max_type_id[0] + 1,)
+
+
+def test_reload_keeps_existing_effects_and_abilities(conn):
+    load.load_all(conn, SOURCES)
+    changed = copy.deepcopy(SOURCES)
+    # Showdown edits after the first load: Scald gains a guaranteed effect ahead of its burn,
+    # and Swampert's Damp moves from the hidden slot to slot 1.
+    changed["moves"]["scald"]["self"] = {"boosts": {"spa": 1}}
+    changed["species"]["swampert"]["abilities"] = {"0": "Torrent", "1": "Damp"}
+
+    counts = load.load_all(conn, changed)
+
+    assert set(counts.values()) == {0}
+    scald_effects = conn.execute(
+        """
+        SELECT e.effect_number, e.is_secondary, e.status
+        FROM reference.move m JOIN reference.move_effect e USING (move_id)
+        WHERE m.showdown_id = 'scald'
+        """
+    ).fetchall()
+    assert scald_effects == [(1, True, "brn")]
+    swampert_abilities = conn.execute(
+        """
+        SELECT sa.slot, a.name
+        FROM reference.species s
+        JOIN reference.species_ability sa USING (species_id)
+        JOIN reference.ability a USING (ability_id)
+        WHERE s.showdown_id = 'swampert'
+        ORDER BY sa.slot
+        """
+    ).fetchall()
+    assert swampert_abilities == [("0", "Torrent"), ("H", "Damp")]

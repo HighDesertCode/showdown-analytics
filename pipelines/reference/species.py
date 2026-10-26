@@ -69,10 +69,11 @@ def ability_rows(pokedex: dict, species_ids: dict[str, int], ability_ids: dict[s
 
 def load(conn: Connection, pokedex: dict) -> tuple[int, int]:
     """Returns (species inserted, species_ability links inserted). Requires types and abilities loaded first."""
-    species_count = insert_new(conn, "species", COLUMNS, rows(pokedex, existing_ids(conn, "type")))
+    new_species_ids = insert_new(conn, "species", COLUMNS, rows(pokedex, existing_ids(conn, "type")))
 
-    links = ability_rows(pokedex, existing_ids(conn, "species"), existing_ids(conn, "ability"))
-    existing_links = set(conn.execute("SELECT species_id, slot FROM reference.species_ability").fetchall())
-    new_links = [link for link in links if link[:2] not in existing_links]
+    # Ability links are written only together with their new species, so a reload never mixes an
+    # existing species' abilities with a changed version from Showdown.
+    new_species = {showdown_id: entry for showdown_id, entry in pokedex.items() if showdown_id in new_species_ids}
+    new_links = ability_rows(new_species, existing_ids(conn, "species"), existing_ids(conn, "ability"))
     insert(conn, "species_ability", ["species_id", "slot", "ability_id"], new_links)
-    return species_count, len(new_links)
+    return len(new_species_ids), len(new_links)

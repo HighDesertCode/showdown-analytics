@@ -22,8 +22,8 @@ def insert(conn: Connection, table: str, columns: list[str], rows: list[tuple]) 
         cursor.executemany(query, rows)
 
 
-def insert_new(conn: Connection, table: str, columns: list[str], rows: list[tuple]) -> int:
-    """Inserts rows whose showdown_id (the first column) is not already in the table.
+def insert_new(conn: Connection, table: str, columns: list[str], rows: list[tuple]) -> set[str]:
+    """Inserts rows whose showdown_id (the first column) is not already in the table; returns the inserted IDs.
 
     Existing rows are skipped up front instead of using ON CONFLICT DO NOTHING, which would use up
     an identity value for every skipped row.
@@ -33,4 +33,4 @@ def insert_new(conn: Connection, table: str, columns: list[str], rows: list[tupl
     existing = existing_ids(conn, table)
     new_rows = [row for row in rows if row[0] not in existing]
     insert(conn, table, columns, new_rows)
-    return len(new_rows)
+    return {row[0] for row in new_rows}

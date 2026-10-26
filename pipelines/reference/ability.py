@@ -21,4 +21,4 @@ def rows(abilities: dict, ability_text: dict) -> list[tuple]:
 
 
 def load(conn: Connection, abilities: dict, ability_text: dict) -> int:
-    return insert_new(conn, "ability", COLUMNS, rows(abilities, ability_text))
+    return len(insert_new(conn, "ability", COLUMNS, rows(abilities, ability_text)))

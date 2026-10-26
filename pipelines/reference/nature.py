@@ -15,4 +15,4 @@ def rows(natures: dict) -> list[tuple]:
 
 
 def load(conn: Connection, natures: dict) -> int:
-    return insert_new(conn, "nature", COLUMNS, rows(natures))
+    return len(insert_new(conn, "nature", COLUMNS, rows(natures)))

@@ -22,4 +22,4 @@ def rows(items: dict, item_text: dict) -> list[tuple]:
 
 
 def load(conn: Connection, items: dict, item_text: dict) -> int:
-    return insert_new(conn, "item", COLUMNS, rows(items, item_text))
+    return len(insert_new(conn, "item", COLUMNS, rows(items, item_text)))

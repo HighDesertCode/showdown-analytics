@@ -119,10 +119,11 @@ def effect_rows(moves: dict, move_ids: dict[str, int]) -> list[tuple]:
 
 def load(conn: Connection, moves: dict, move_text: dict) -> tuple[int, int]:
     """Returns (moves inserted, move_effect rows inserted). Requires types loaded first."""
-    move_count = insert_new(conn, "move", COLUMNS, rows(moves, move_text, existing_ids(conn, "type")))
+    new_move_ids = insert_new(conn, "move", COLUMNS, rows(moves, move_text, existing_ids(conn, "type")))
 
-    effect_list = effect_rows(moves, existing_ids(conn, "move"))
-    existing_effects = set(conn.execute("SELECT move_id, effect_number FROM reference.move_effect").fetchall())
-    new_effects = [effect for effect in effect_list if effect[:2] not in existing_effects]
+    # Effects are written only together with their new move, so a reload never mixes an existing
+    # move's effects with a changed version from Showdown.
+    new_moves = {showdown_id: move for showdown_id, move in moves.items() if showdown_id in new_move_ids}
+    new_effects = effect_rows(new_moves, existing_ids(conn, "move"))
     insert(conn, "move_effect", EFFECT_COLUMNS, new_effects)
-    return move_count, len(new_effects)
+    return len(new_move_ids), len(new_effects)
