@@ -1,0 +1,33 @@
+name: Python pipelines lint
+
+on:
+  pull_request:
+    paths:
+      - "pipelines/**"
+      - "tests/pipelines/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".python-version"
+      - ".github/workflows/python-pipelines-lint.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repository Checkout
+        uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.2
+
+      - name: Install Dependencies
+        run: uv sync --locked
+
+      - name: Lint
+        run: uv run ruff check pipelines tests/pipelines
+
+      - name: Check Formatting
+        run: uv run ruff format --check pipelines tests/pipelines

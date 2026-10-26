@@ -1,0 +1,30 @@
+name: Python pipelines type checker
+
+on:
+  pull_request:
+    paths:
+      - "pipelines/**"
+      - "tests/pipelines/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".python-version"
+      - ".github/workflows/python-pipelines-type-checker.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  type-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repository Checkout
+        uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.2
+
+      - name: Install Dependencies
+        run: uv sync --locked
+
+      - name: Type Check
+        run: uv run ty check pipelines tests/pipelines

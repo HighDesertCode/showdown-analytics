@@ -19,13 +19,26 @@
 | Connection encryption | SSL required according to cluster metadata |
 | Trusted sources | Droplet `tailscale-virtual-machine` (ID `612370828`) |
 
-`showdown-database` was recreated empty on October 25, 2026. Backups and Terraform adoption remain unverified.
+`showdown-database` was recreated empty on October 25, 2026. The `reference` schema was created from `sql/` that day and loaded on October 26, 2026 by `pipelines load-reference` from Showdown's current data files; a rerun inserted no rows. Backups and Terraform adoption remain unverified.
+
+| `reference` table | Rows | Notes |
+| --- | ---: | --- |
+| `type` | 18 | Standard types; Tera-only Stellar excluded |
+| `ability` | 321 | With short descriptions |
+| `species` | 1,462 | Excludes cosmetic forms and `Custom` entries such as MissingNo. |
+| `species_ability` | 3,191 | Slots `0`, `1`, and `H`; special-event slot `S` excluded |
+| `move` | 954 | With target and short descriptions |
+| `move_effect` | 440 | Guaranteed and secondary effects, including stat stages and field effects |
+| `item` | 587 | With berry flag and short descriptions |
+| `nature` | 25 | Neutral natures have no stat changes |
+
+Removed or non-Gen 9 entries remain, flagged in `nonstandard` (e.g. `Past`, `CAP`). The data reflects Showdown at load time; no source revisions or archives are recorded yet.
 
 ## Schemas
 
 | Schema | Responsibility | Core entities |
 | --- | --- | --- |
-| `reference` | Canonical Pokémon data and historical rules | Species/forms, types, moves, items, abilities, natures, aliases, format versions |
+| `reference` | Canonical Pokémon data and historical rules | Deployed: types, species/forms, abilities, moves, move effects, items, natures. Planned: aliases, format versions |
 | `sources` | Provenance and processing history | Source artifacts, revisions, ingestion runs, processing outcomes |
 | `statistics` | Published monthly aggregates | Snapshots, usage, options, spreads, teammates, counters, metagame tags, type matchups |
 | `replays` | Public battle evidence | Battles, sides, Pokémon instances, ordered events, observations |
@@ -80,7 +93,7 @@ The deployed access Droplet is `tailscale-virtual-machine`, with private address
 
 The intended connection path is Mac → Tailscale subnet router → PostgreSQL private endpoint. Approved routes and tailnet access rules limit destinations and ports. Default subnet-router source NAT makes forwarded connections originate from the router; database TLS still verifies the database hostname. Sources: [Tailscale subnet routers](https://tailscale.com/kb/1019/subnets) and [DigitalOcean PostgreSQL connectivity](https://docs.digitalocean.com/products/databases/postgresql/how-to/connect/).
 
-The intended access model separates migration, ingestion, public read-only, and private-research roles. Public readers have no access to `research`. Managed connections use restricted network paths and TLS with certificate verification; these controls remain subject to implementation and validation.
+The intended access model separates migration, ingestion, public read-only, and private-research roles. Public readers have no access to `research`. Managed connections use restricted network paths and TLS with certificate verification; these controls remain subject to implementation and validation. Currently, `doadmin` owns the `reference` objects, and `showdown-analyst` has `USAGE` on the schema and `SELECT`, `INSERT`, and `DELETE` (no `UPDATE`) on its tables, including future tables through default privileges. The grant file `sql/permissions/showdown_analyst.sql` is applied but not yet committed.
 
 | Owner | Managed changes |
 | --- | --- |
@@ -89,4 +102,4 @@ The intended access model separates migration, ingestion, public read-only, and 
 
 The Terraform workflow adopts manually created services through matching resource definitions and `terraform import`. A refreshed plan showing no changes establishes configuration parity for managed attributes. Remote state is kept outside Git with restricted access and a documented locking approach. Unsupported resources and cloud-managed database users have explicit ownership to prevent conflicts with SQL migrations. Terraform adoption is planned; it was not verified during this inspection.
 
-SQL organization and execution tooling will be revisited incrementally as implementation restarts.
+SQL lives in `sql/create/`, `sql/index/`, and `sql/permissions/`, one file per table or role, and is run manually as `doadmin` in foreign-key order (listed in `tests/pipelines/conftest.py`). Migration tooling is not yet in place.
