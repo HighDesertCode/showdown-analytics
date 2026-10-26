@@ -10,7 +10,7 @@ All services run on DigitalOcean. Notion is used separately for personal notes. 
 
 - **Database:** Managed PostgreSQL. Project data goes in `showdown-database` via `showdown-analyst`; never use `defaultdb` or infer the database/user from cluster defaults. Schema changes go through SQL migrations run by a separate DDL-privileged account.
 - **Developer access:** Tailscale subnet router on a Droplet in the database VPC, plus trusted sources and TLS with certificate verification.
-- **Planned:** Spaces (raw archives), Python collectors run locally then on App Platform (with scheduling), a read-only FastAPI service, a Streamlit site consuming that API, and private research storage that is never reachable from public endpoints.
+- **Planned:** Spaces (raw archives), Python collectors run locally then on App Platform (with scheduling), a read-only FastAPI service, a Streamlit site and a public CLI that both consume only that API, and private research storage that is never reachable from public endpoints.
 
 **Terraform:** Create services manually, write matching configuration, `terraform import`, and confirm a no-change plan before managing changes through Terraform. Keep state outside Git; never commit state, plans, credentials, or secret variable files.
 
