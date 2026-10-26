@@ -19,6 +19,12 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["pipelines"]
 
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--import-mode=importlib"
@@ -26,4 +32,6 @@ addopts = "--import-mode=importlib"
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "ruff==0.17.2",
+    "ty==0.0.92",
 ]

@@ -12,15 +12,34 @@ def stages(changes: dict) -> tuple:
 def test_rows_map_type_and_treat_true_accuracy_as_null():
     moves = {
         "swift": {
-            "num": 129, "name": "Swift", "type": "Normal", "category": "Special", "basePower": 60,
-            "accuracy": True, "pp": 20, "priority": 0, "target": "allAdjacentFoes",
+            "num": 129,
+            "name": "Swift",
+            "type": "Normal",
+            "category": "Special",
+            "basePower": 60,
+            "accuracy": True,
+            "pp": 20,
+            "priority": 0,
+            "target": "allAdjacentFoes",
         },
     }
     move_text = {"swift": {"shortDesc": "This move does not check accuracy. Hits foes."}}
 
     assert move.rows(moves, move_text, {"normal": 7}) == [
-        ("swift", "Swift", 129, 7, "Special", 60, None, 20, 0, "allAdjacentFoes",
-         "This move does not check accuracy. Hits foes.", None),
+        (
+            "swift",
+            "Swift",
+            129,
+            7,
+            "Special",
+            60,
+            None,
+            20,
+            0,
+            "allAdjacentFoes",
+            "This move does not check accuracy. Hits foes.",
+            None,
+        ),
     ]
 
 
@@ -28,8 +47,14 @@ def test_rows_map_type_and_treat_true_accuracy_as_null():
     ("data", "expected"),
     [
         pytest.param(
-            {"target": "normal", "secondaries": [{"chance": 10, "status": "brn"}, {"chance": 10, "volatileStatus": "flinch"}]},
-            [(True, 10, "target", "brn", None, None, *NO_STAGES), (True, 10, "target", None, "flinch", None, *NO_STAGES)],
+            {
+                "target": "normal",
+                "secondaries": [{"chance": 10, "status": "brn"}, {"chance": 10, "volatileStatus": "flinch"}],
+            },
+            [
+                (True, 10, "target", "brn", None, None, *NO_STAGES),
+                (True, 10, "target", None, "flinch", None, *NO_STAGES),
+            ],
             id="fire-fang-two-secondaries",
         ),
         pytest.param(
@@ -75,6 +100,11 @@ def test_effects(data, expected):
 
 
 def test_effect_rows_number_effects_per_move():
-    moves = {"firefang": {"target": "normal", "secondaries": [{"chance": 10, "status": "brn"}, {"chance": 10, "volatileStatus": "flinch"}]}}
+    moves = {
+        "firefang": {
+            "target": "normal",
+            "secondaries": [{"chance": 10, "status": "brn"}, {"chance": 10, "volatileStatus": "flinch"}],
+        }
+    }
 
     assert [row[:2] for row in move.effect_rows(moves, {"firefang": 5})] == [(5, 1), (5, 2)]

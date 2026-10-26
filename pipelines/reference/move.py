@@ -10,12 +10,35 @@ from pipelines.reference.common import existing_ids, insert, insert_new
 from pipelines.showdown import to_id
 
 COLUMNS = [
-    "showdown_id", "name", "num", "type_id", "category", "base_power", "accuracy", "pp", "priority",
-    "target", "short_description", "nonstandard",
+    "showdown_id",
+    "name",
+    "num",
+    "type_id",
+    "category",
+    "base_power",
+    "accuracy",
+    "pp",
+    "priority",
+    "target",
+    "short_description",
+    "nonstandard",
 ]
 EFFECT_COLUMNS = [
-    "move_id", "effect_number", "is_secondary", "chance", "affects", "status", "volatile_status", "field_effect",
-    "atk_stages", "def_stages", "spa_stages", "spd_stages", "spe_stages", "accuracy_stages", "evasion_stages",
+    "move_id",
+    "effect_number",
+    "is_secondary",
+    "chance",
+    "affects",
+    "status",
+    "volatile_status",
+    "field_effect",
+    "atk_stages",
+    "def_stages",
+    "spa_stages",
+    "spd_stages",
+    "spe_stages",
+    "accuracy_stages",
+    "evasion_stages",
 ]
 BOOST_STATS = ("atk", "def", "spa", "spd", "spe", "accuracy", "evasion")
 WHOLE_FIELD_KEYS = ("weather", "terrain", "pseudoWeather")

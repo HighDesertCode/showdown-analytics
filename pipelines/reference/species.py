@@ -10,8 +10,20 @@ from pipelines.reference.common import existing_ids, insert, insert_new
 from pipelines.showdown import to_id
 
 COLUMNS = [
-    "showdown_id", "name", "dex_number", "base_species", "forme", "type_1_id", "type_2_id",
-    "hp", "atk", "def", "spa", "spd", "spe", "nonstandard",
+    "showdown_id",
+    "name",
+    "dex_number",
+    "base_species",
+    "forme",
+    "type_1_id",
+    "type_2_id",
+    "hp",
+    "atk",
+    "def",
+    "spa",
+    "spd",
+    "spe",
+    "nonstandard",
 ]
 STATS = ("hp", "atk", "def", "spa", "spd", "spe")
 ABILITY_SLOTS = ("0", "1", "H")
@@ -29,10 +41,19 @@ def rows(pokedex: dict, type_ids: dict[str, int]) -> list[tuple]:
         entry_type_ids = [type_ids[to_id(name)] for name in entry["types"]]
         type_2_id = entry_type_ids[1] if len(entry_type_ids) > 1 else None
         stats = [entry["baseStats"][stat] for stat in STATS]
-        result.append((
-            showdown_id, entry["name"], entry["num"], entry.get("baseSpecies"), entry.get("forme"),
-            entry_type_ids[0], type_2_id, *stats, entry.get("isNonstandard"),
-        ))
+        result.append(
+            (
+                showdown_id,
+                entry["name"],
+                entry["num"],
+                entry.get("baseSpecies"),
+                entry.get("forme"),
+                entry_type_ids[0],
+                type_2_id,
+                *stats,
+                entry.get("isNonstandard"),
+            )
+        )
     return result
 
 

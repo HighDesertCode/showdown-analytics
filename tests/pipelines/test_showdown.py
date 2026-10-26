@@ -8,7 +8,7 @@ def test_parse_json():
 
 
 def test_parse_client_js_export():
-    text = 'exports.BattleTypeChart = {water:{damageTaken:{Fire:2}},ground:{damageTaken:{}}};'
+    text = "exports.BattleTypeChart = {water:{damageTaken:{Fire:2}},ground:{damageTaken:{}}};"
 
     assert showdown.parse(text) == {"water": {"damageTaken": {"Fire": 2}}, "ground": {"damageTaken": {}}}
 

@@ -3,17 +3,29 @@ from pipelines.reference import species
 STATS = {"hp": 50, "atk": 65, "def": 107, "spa": 105, "spd": 107, "spe": 86}
 POKEDEX = {
     "rotomwash": {
-        "num": 479, "name": "Rotom-Wash", "baseSpecies": "Rotom", "forme": "Wash",
-        "types": ["Electric", "Water"], "baseStats": STATS, "abilities": {"0": "Levitate"},
+        "num": 479,
+        "name": "Rotom-Wash",
+        "baseSpecies": "Rotom",
+        "forme": "Wash",
+        "types": ["Electric", "Water"],
+        "baseStats": STATS,
+        "abilities": {"0": "Levitate"},
     },
     "greninja": {
-        "num": 658, "name": "Greninja", "types": ["Water", "Dark"], "baseStats": STATS,
+        "num": 658,
+        "name": "Greninja",
+        "types": ["Water", "Dark"],
+        "baseStats": STATS,
         "abilities": {"0": "Torrent", "H": "Protean", "S": "Battle Bond"},
     },
     "vivillonfancy": {"name": "Vivillon-Fancy", "isCosmeticForme": True},
     "missingno": {
-        "num": 0, "name": "MissingNo.", "types": ["Bird", "Normal"], "baseStats": STATS,
-        "abilities": {"0": ""}, "isNonstandard": "Custom",
+        "num": 0,
+        "name": "MissingNo.",
+        "types": ["Bird", "Normal"],
+        "baseStats": STATS,
+        "abilities": {"0": ""},
+        "isNonstandard": "Custom",
     },
 }
 TYPE_IDS = {"electric": 1, "water": 2, "dark": 3}
