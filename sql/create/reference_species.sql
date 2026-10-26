@@ -7,8 +7,8 @@ CREATE TABLE reference.species (
     dex_number   smallint NOT NULL,
     base_species text,
     forme        text,
-    type_1       text     NOT NULL,
-    type_2       text,
+    type_1_id    bigint   NOT NULL REFERENCES reference.type (type_id),
+    type_2_id    bigint   REFERENCES reference.type (type_id),
     hp           smallint NOT NULL CHECK (hp  BETWEEN 0 AND 255),
     atk          smallint NOT NULL CHECK (atk BETWEEN 0 AND 255),
     def          smallint NOT NULL CHECK (def BETWEEN 0 AND 255),
@@ -16,6 +16,6 @@ CREATE TABLE reference.species (
     spd          smallint NOT NULL CHECK (spd BETWEEN 0 AND 255),
     spe          smallint NOT NULL CHECK (spe BETWEEN 0 AND 255),
     nonstandard  text,
-    CONSTRAINT species_types_distinct CHECK (type_2 <> type_1),
+    CONSTRAINT species_types_distinct CHECK (type_2_id <> type_1_id),
     CONSTRAINT species_forme_pairing  CHECK ((base_species IS NULL) = (forme IS NULL))
 );
