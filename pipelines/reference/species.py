@@ -6,7 +6,7 @@ and Pokéstar Studios props, and special-event abilities (slot "S").
 
 from psycopg import Connection
 
-from pipelines.reference.common import existing_ids, insert_new
+from pipelines.reference.common import existing_ids, insert, insert_new
 from pipelines.showdown import to_id
 
 COLUMNS = [
@@ -53,9 +53,5 @@ def load(conn: Connection, pokedex: dict) -> tuple[int, int]:
     links = ability_rows(pokedex, existing_ids(conn, "species"), existing_ids(conn, "ability"))
     existing_links = set(conn.execute("SELECT species_id, slot FROM reference.species_ability").fetchall())
     new_links = [link for link in links if link[:2] not in existing_links]
-    with conn.cursor() as cursor:
-        cursor.executemany(
-            "INSERT INTO reference.species_ability (species_id, slot, ability_id) VALUES (%s, %s, %s)",
-            new_links,
-        )
+    insert(conn, "species_ability", ["species_id", "slot", "ability_id"], new_links)
     return species_count, len(new_links)

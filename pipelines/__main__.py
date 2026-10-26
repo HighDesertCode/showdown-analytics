@@ -7,9 +7,12 @@ from pipelines import db
 
 def check_connection() -> None:
     with db.connect() as conn:
-        user, database, ssl = conn.execute(
+        row = conn.execute(
             "SELECT current_user, current_database(), ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()"
         ).fetchone()
+    if row is None:
+        raise RuntimeError("Could not read connection details")
+    user, database, ssl = row
     print(f"Connected to {database} as {user} (SSL: {ssl})")
 
 

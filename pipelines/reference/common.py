@@ -12,6 +12,16 @@ def existing_ids(conn: Connection, table: str) -> dict[str, int]:
     return dict(conn.execute(query).fetchall())
 
 
+def insert(conn: Connection, table: str, columns: list[str], rows: list[tuple]) -> None:
+    query = sql.SQL("INSERT INTO reference.{table} ({columns}) VALUES ({values})").format(
+        table=sql.Identifier(table),
+        columns=sql.SQL(", ").join(map(sql.Identifier, columns)),
+        values=sql.SQL(", ").join([sql.Placeholder()] * len(columns)),
+    )
+    with conn.cursor() as cursor:
+        cursor.executemany(query, rows)
+
+
 def insert_new(conn: Connection, table: str, columns: list[str], rows: list[tuple]) -> int:
     """Inserts rows whose showdown_id (the first column) is not already in the table.
 
@@ -22,11 +32,5 @@ def insert_new(conn: Connection, table: str, columns: list[str], rows: list[tupl
         raise ValueError("The first column must be showdown_id")
     existing = existing_ids(conn, table)
     new_rows = [row for row in rows if row[0] not in existing]
-    query = sql.SQL("INSERT INTO reference.{table} ({columns}) VALUES ({values})").format(
-        table=sql.Identifier(table),
-        columns=sql.SQL(", ").join(map(sql.Identifier, columns)),
-        values=sql.SQL(", ").join([sql.Placeholder()] * len(columns)),
-    )
-    with conn.cursor() as cursor:
-        cursor.executemany(query, new_rows)
+    insert(conn, table, columns, new_rows)
     return len(new_rows)
