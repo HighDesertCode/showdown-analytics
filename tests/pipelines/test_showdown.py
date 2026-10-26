@@ -32,6 +32,14 @@ def test_parse_rejects_text_without_data():
         showdown.parse("export const nothing = 1;")
 
 
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [("Heavy-Duty Boots", "heavydutyboots"), ("Rotom-Wash", "rotomwash"), ("Mr. Mime", "mrmime"), ("Water", "water")],
+)
+def test_to_id(name, expected):
+    assert showdown.to_id(name) == expected
+
+
 def test_load_fetches_source_url(monkeypatch):
     fetched = []
     monkeypatch.setattr(showdown, "fetch", lambda url: fetched.append(url) or "{}")

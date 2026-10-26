@@ -45,5 +45,10 @@ def parse(text: str) -> dict:
     return json5.loads(text[assignment.end() - 1 : text.rindex("}") + 1])
 
 
+def to_id(name: str) -> str:
+    """Converts a display name to a Showdown ID, matching Showdown's toID (Heavy-Duty Boots -> heavydutyboots)."""
+    return re.sub(r"[^a-z0-9]", "", name.lower())
+
+
 def load(name: str) -> dict:
     return parse(fetch(SOURCES[name]))
