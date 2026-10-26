@@ -5,6 +5,7 @@ description = "Source-attributed Pokemon Showdown analytics"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "json5>=0.17.3",
     "psycopg[binary]>=3.3.6",
 ]
 
