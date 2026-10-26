@@ -1,0 +1,30 @@
+name: Python pipelines tests
+
+on:
+  pull_request:
+    paths:
+      - "pipelines/**"
+      - "tests/pipelines/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".python-version"
+      - ".github/workflows/python-pipelines-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repository Checkout
+        uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.2
+
+      - name: Install Dependencies
+        run: uv sync --locked
+
+      - name: Run Tests
+        run: uv run pytest tests/pipelines
