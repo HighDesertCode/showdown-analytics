@@ -1,5 +1,5 @@
 -- One row per battle-relevant Pokémon species or form from Showdown's pokedex.json.
--- Cosmetic forms (e.g. Vivillon-Fancy) are excluded; they share their base form's types and stats.
+-- Cosmetic forms (e.g. Vivillon-Icy Snow) are excluded; they share their base form's types and stats.
 CREATE TABLE reference.species (
     species_id   bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     showdown_id  text     NOT NULL UNIQUE CHECK (showdown_id ~ '^[a-z0-9]+$'),

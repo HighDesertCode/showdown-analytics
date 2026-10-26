@@ -18,7 +18,7 @@ POKEDEX = {
         "baseStats": STATS,
         "abilities": {"0": "Torrent", "H": "Protean", "S": "Battle Bond"},
     },
-    "vivillonfancy": {"name": "Vivillon-Fancy", "isCosmeticForme": True},
+    "vivillonicysnow": {"name": "Vivillon-Icy Snow", "isCosmeticForme": True},
     "missingno": {
         "num": 0,
         "name": "MissingNo.",
