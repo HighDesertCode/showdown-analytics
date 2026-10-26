@@ -5,6 +5,7 @@ on:
     paths:
       - "pipelines/**"
       - "tests/pipelines/**"
+      - "sql/**"
       - "pyproject.toml"
       - "uv.lock"
       - ".python-version"
@@ -16,6 +17,18 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Repository Checkout
         uses: actions/checkout@v7
@@ -27,4 +40,6 @@ jobs:
         run: uv sync --locked
 
       - name: Run Tests
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
         run: uv run pytest tests/pipelines
