@@ -37,6 +37,6 @@ All services run on DigitalOcean. Notion is used separately for personal notes. 
 # Git Strategy
 
 - **The user runs all Git commands that change state.** Read-only commands (e.g. `git status`, `git diff`, `git log`, `git show`) are allowed. Never run commands that modify the repository or remote (e.g. `add`, `commit`, `push`, `branch`, `merge`, `rebase`, `reset`, `stash`), directly or indirectly, and never use GitHub tools, the `gh` CLI, or APIs to branch, commit, push, open, or merge PRs. Provide exact commands, explain them, and wait for output when needed.
-- One focused branch and PR per coherent change, targeting `main`. Use **Conventional Commits** (`type(scope): description`) for commits and PR titles, and **squash and merge**. Write PR descriptions that work as the squash commit body: change summary, issue references, validation, and limitations.
+- One focused branch and PR per coherent change, targeting `main`. Use **Conventional Commits** (`type(scope): description`) for commits and PR titles, and **squash and merge**. Provide only the PR title: Greptile writes PR descriptions, and the user links issues in the PR sidebar so they close on merge.
 - **Never add `Co-authored-by:` or any co-author attribution** to commits, squash messages, PR descriptions, or suggested commands.
 - Keep issues concise: at most three bullet points covering scope and acceptance criteria.
