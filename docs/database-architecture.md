@@ -44,7 +44,7 @@ Removed or non-Gen 9 entries remain, flagged in `nonstandard` (e.g. `Past`, `CAP
 | `replays` | Public battle evidence | Battles, sides, Pokémon instances, ordered events, observations |
 | `research` | Private competitive records | Versioned teams, team members, personal battles, notes, hypotheses |
 
-Core relationships by domain; supporting tables and columns are omitted. Relationships are proposed and will be finalized in migrations.
+Core relationships by domain; supporting tables and columns are omitted. Relationships are proposed and will be finalized in each schema's milestone.
 
 ### Monthly Statistics
 
@@ -71,7 +71,7 @@ Core relationships by domain; supporting tables and columns are omitted. Relatio
 | `personal_battle` | References one team version and optionally one public replay battle. |
 | `battle` | May be linked to zero or more personal battle records. |
 
-In the proposed design, public schemas have no dependency on private research. Monthly aggregates and replays share reference entities without an assumed battle-level join. Their table definitions are covered by later M1 issues.
+In the proposed design, public schemas have no dependency on private research. Monthly aggregates and replays share reference entities without an assumed battle-level join. Their table definitions are covered by M2, M4, and M5.
 
 ## Data Conventions
 
@@ -93,13 +93,22 @@ The deployed access Droplet is `tailscale-virtual-machine`, with private address
 
 The intended connection path is Mac → Tailscale subnet router → PostgreSQL private endpoint. Approved routes and tailnet access rules limit destinations and ports. Default subnet-router source NAT makes forwarded connections originate from the router; database TLS still verifies the database hostname. Sources: [Tailscale subnet routers](https://tailscale.com/kb/1019/subnets) and [DigitalOcean PostgreSQL connectivity](https://docs.digitalocean.com/products/databases/postgresql/how-to/connect/).
 
-The intended access model separates migration, ingestion, public read-only, and private-research roles. Public readers have no access to `research`. Managed connections use restricted network paths and TLS with certificate verification; these controls remain subject to implementation and validation. Currently, `doadmin` owns the `reference` objects, and `showdown-analyst` has `USAGE` on the schema and `SELECT`, `INSERT`, and `DELETE` (no `UPDATE`) on its tables, including future tables through default privileges. The grant file `sql/permissions/showdown_analyst.sql` is applied but not yet committed.
+`showdown-analyst` is the project's only role. It has `USAGE` on `reference` and `SELECT` and `INSERT` on its tables, including future tables through default privileges; it has no `UPDATE`, `DELETE`, DDL, or `defaultdb` access. Its grants are in `sql/permissions/showdown_analyst.sql`. `doadmin` owns all project objects and is used only to run SQL files. `PUBLIC` keeps PostgreSQL's default `CONNECT` and `TEMP` on `showdown-database` but has no `CONNECT` on `defaultdb`. Private research must never be reachable from public endpoints.
 
 | Owner | Managed changes |
 | --- | --- |
 | Terraform | Supported cloud resources, networking, service configuration, and infrastructure drift |
-| SQL migrations | Schemas, tables, relationships, constraints, indexes, database roles, and grants |
+| SQL files (`sql/`) | Schemas, tables, relationships, constraints, indexes, database roles, and grants |
 
-The Terraform workflow adopts manually created services through matching resource definitions and `terraform import`. A refreshed plan showing no changes establishes configuration parity for managed attributes. Remote state is kept outside Git with restricted access and a documented locking approach. Unsupported resources and cloud-managed database users have explicit ownership to prevent conflicts with SQL migrations. Terraform adoption is planned; it was not verified during this inspection.
+The Terraform workflow adopts manually created services through matching resource definitions and `terraform import`. A refreshed plan showing no changes establishes configuration parity for managed attributes. Remote state is kept outside Git with restricted access and a documented locking approach. Unsupported resources and cloud-managed database users have explicit ownership to prevent conflicts with SQL migrations. Terraform adoption is planned for M6, once the remaining services are deployed.
 
-SQL lives in `sql/create/`, `sql/index/`, and `sql/permissions/`, one file per table or role, and is run manually as `doadmin` in foreign-key order (listed in `tests/pipelines/conftest.py`). Migration tooling is not yet in place.
+## Applying SQL Changes
+
+SQL is applied by hand; nothing runs it automatically.
+
+1. Add or edit one file per table, index, or role in `sql/create/`, `sql/index/`, or `sql/permissions/`.
+2. Run new files as `doadmin` in TablePlus against `showdown-database`: schemas, then tables in foreign-key order, then indexes, then permissions. The full order is `SQL_FILES` in `tests/pipelines/conftest.py`, which CI uses to build its test database.
+3. Grant files only add privileges. When removing one, run a one-time `REVOKE` and update the file to match.
+4. Verify as `showdown-analyst`, then update this document's deployed state.
+
+Changing an existing table means a one-time `ALTER` (or drop and reload, since reference data can be refetched) plus an edit to its `create` file, so the files always describe the current schema. Migration tooling (e.g. versioned migration files with a tracking table) becomes worthwhile when tables hold data that can't be reloaded, such as statistics history or private research, or when more than one environment needs the same changes.
