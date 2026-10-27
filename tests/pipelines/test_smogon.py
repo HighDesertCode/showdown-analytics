@@ -47,3 +47,11 @@ def test_report_files_cover_every_scope_and_baseline():
         team_type="water",
         url="https://www.smogon.com/stats/2026-09/monotype/chaos/gen9monotype-monowater-1630.json",
     )
+
+
+def test_usage_urls():
+    assert smogon.url("usage", SEPTEMBER, 1630) == "https://www.smogon.com/stats/2026-09/gen9monotype-1630.txt"
+    assert (
+        smogon.url("usage", SEPTEMBER, 1760, "water")
+        == "https://www.smogon.com/stats/2026-09/monotype/gen9monotype-monowater-1760.txt"
+    )

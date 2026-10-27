@@ -15,6 +15,7 @@ BASELINES = (1630, 1760)
 # Each family's directory and file extension within a month's folder.
 FAMILIES = {
     "chaos": ("chaos/", "json"),
+    "usage": ("", "txt"),
 }
 
 

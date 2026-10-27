@@ -34,7 +34,8 @@ def load_smogon(month: date) -> None:
     with db.connect() as conn:
         type_ids = existing_ids(conn, "type")
         team_types = sorted(type_ids, key=type_ids.__getitem__)
-        for file in smogon.report_files("chaos", month, team_types):
+        files = [file for family in smogon.FAMILIES for file in smogon.report_files(family, month, team_types)]
+        for file in files:
             counts = load_file(conn, file, type_ids.get(file.team_type) if file.team_type else None)
             # Commit each file on its own: a later failure keeps earlier files, and a rerun skips them.
             conn.commit()

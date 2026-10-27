@@ -1,9 +1,18 @@
 """Loads one Smogon report file into the raw schema."""
 
+from collections.abc import Callable
+
 from psycopg import Connection
 
-from pipelines.raw import chaos, source_file
+from pipelines.raw import chaos, source_file, usage
+from pipelines.raw.common import Report, ReportFormatError
 from pipelines.smogon import ReportFile
+
+# Each family's parser. Parsers that only need the file's content ignore the ReportFile.
+PARSERS: dict[str, Callable[[bytes, ReportFile], Report]] = {
+    "chaos": chaos.parse,
+    "usage": lambda content, file: usage.parse(content),
+}
 
 
 def load_file(conn: Connection, file: ReportFile, team_type_id: int | None) -> dict[str, int] | None:
@@ -15,8 +24,8 @@ def load_file(conn: Connection, file: ReportFile, team_type_id: int | None) -> d
     if source_file.is_loaded(conn, retrieved):
         return None
     try:
-        report = chaos.parse(retrieved.content, file)
-    except chaos.ChaosFormatError as error:
-        raise chaos.ChaosFormatError(f"{file.url}: {error}") from error
+        report = PARSERS[file.family](retrieved.content, file)
+    except ReportFormatError as error:
+        raise ReportFormatError(f"{file.url}: {error}") from error
     source_file_id = source_file.insert(conn, retrieved, team_type_id)
-    return chaos.load(conn, source_file_id, report)
+    return report.load(conn, source_file_id)

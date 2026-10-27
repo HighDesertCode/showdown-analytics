@@ -7,6 +7,7 @@ import pytest
 
 from pipelines import smogon
 from pipelines.raw import chaos
+from pipelines.raw.common import ReportFormatError
 
 OVERALL, WATER = smogon.report_files("chaos", date(2026, 9, 1), ["water"])[:2]
 
@@ -87,5 +88,5 @@ def broken(change) -> dict:
     ],
 )
 def test_parse_rejects_unexpected_shapes(report, message):
-    with pytest.raises(chaos.ChaosFormatError, match=message):
+    with pytest.raises(ReportFormatError, match=message):
         chaos.parse(encode(report), OVERALL)
