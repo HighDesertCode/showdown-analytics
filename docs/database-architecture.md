@@ -16,10 +16,10 @@
 | Project user | `showdown-analyst` |
 | Default database | `defaultdb`; not used by the project |
 | Networking | Assigned VPC; public and private connection endpoints available |
-| Connection encryption | SSL required according to cluster metadata |
+| Connection encryption | Required; clients use `verify-full` with DigitalOcean's CA certificate |
 | Trusted sources | Droplet `tailscale-virtual-machine` (ID `612370828`) |
 
-`showdown-database` was recreated empty on October 25, 2026. The `reference` schema was created from `sql/` that day and loaded on October 26, 2026 by `pipelines load-reference` from Showdown's current data files; a rerun inserted no rows. Backups and Terraform adoption remain unverified.
+`showdown-database` was recreated empty on October 25, 2026. The `reference` schema was created from `sql/` that day and loaded on October 26, 2026 by `pipelines load-reference` from Showdown's current data files; a rerun inserted no rows. Backups remain unverified.
 
 | `reference` table | Rows | Notes |
 | --- | ---: | --- |
@@ -36,42 +36,15 @@ Removed or non-Gen 9 entries remain, flagged in `nonstandard` (e.g. `Past`, `CAP
 
 ## Schemas
 
-| Schema | Responsibility | Core entities |
-| --- | --- | --- |
-| `reference` | Canonical Pokémon data and historical rules | Deployed: types, species/forms, abilities, moves, move effects, items, natures. Planned: aliases, format versions |
-| `sources` | Provenance and processing history | Source artifacts, revisions, ingestion runs, processing outcomes |
-| `statistics` | Published monthly aggregates | Snapshots, usage, options, spreads, teammates, counters, metagame tags, type matchups |
-| `replays` | Public battle evidence | Battles, sides, Pokémon instances, ordered events, observations |
-| `research` | Private competitive records | Versioned teams, team members, personal battles, notes, hypotheses |
+| Schema | Milestone | Responsibility | Core entities |
+| --- | --- | --- | --- |
+| `reference` | M1 (deployed) | Canonical Pokémon data and historical rules | Types, species/forms, abilities, moves, move effects, items, natures; aliases and format versions later |
+| `sources` | M2 | Provenance and processing history | Source files, revisions, ingestion runs, processing outcomes |
+| `statistics` | M2 | Published monthly aggregates | Snapshots, usage, options, spreads, teammates, counters, metagame tags, type matchups |
+| `replays` | M4 | Public battle evidence | Battles, sides, Pokémon instances, ordered events, observations |
+| `research` | M5 | Private competitive records | Versioned teams, team members, personal battles, notes, hypotheses |
 
-Core relationships by domain; supporting tables and columns are omitted. Relationships are proposed and will be finalized in each schema's milestone.
-
-### Monthly Statistics
-
-| Entity | Relationship |
-| --- | --- |
-| `stats_snapshot` | Groups zero or more `pokemon_usage` records; each usage record belongs to one snapshot. |
-| `species` | Identifies the Pokémon in zero or more usage records; each usage record references one species. |
-| `source_artifact` | Supports zero or more usage records; each usage record references one artifact. |
-
-### Public Replays
-
-| Entity | Relationship |
-| --- | --- |
-| `source_artifact` | Documents zero or more battles; each battle references one artifact. |
-| `battle` | Contains zero or more `battle_pokemon` records; each Pokémon instance belongs to one battle. |
-| `species` | Identifies zero or more battle Pokémon; each instance optionally references one species when known. |
-
-### Private Research
-
-| Entity | Relationship |
-| --- | --- |
-| `team_version` | Contains zero or more team members and links to zero or more personal battles. |
-| `team_member` | Belongs to one team version and references one species. |
-| `personal_battle` | References one team version and optionally one public replay battle. |
-| `battle` | May be linked to zero or more personal battle records. |
-
-In the proposed design, public schemas have no dependency on private research. Monthly aggregates and replays share reference entities without an assumed battle-level join. Their table definitions are covered by M2, M4, and M5.
+Each schema's tables and relationships are designed in its milestone. Public schemas never depend on private research.
 
 ## Data Conventions
 
@@ -91,7 +64,7 @@ Managed PostgreSQL is the deployed relational store. DigitalOcean Spaces archiva
 
 The deployed access Droplet is `tailscale-virtual-machine`, with private address `10.120.0.4`, in the database's `default-sfo2` VPC (`10.120.0.0/20`). It is a database trusted source and has joined the tailnet. Private connectivity through the subnet router has been verified.
 
-The intended connection path is Mac → Tailscale subnet router → PostgreSQL private endpoint. Approved routes and tailnet access rules limit destinations and ports. Default subnet-router source NAT makes forwarded connections originate from the router; database TLS still verifies the database hostname. Sources: [Tailscale subnet routers](https://tailscale.com/kb/1019/subnets) and [DigitalOcean PostgreSQL connectivity](https://docs.digitalocean.com/products/databases/postgresql/how-to/connect/).
+The connection path is Mac → Tailscale subnet router → PostgreSQL private endpoint. Approved routes and tailnet access rules limit destinations and ports. Default subnet-router source NAT makes forwarded connections originate from the router; database TLS still verifies the database hostname. Sources: [Tailscale subnet routers](https://tailscale.com/kb/1019/subnets) and [DigitalOcean PostgreSQL connectivity](https://docs.digitalocean.com/products/databases/postgresql/how-to/connect/).
 
 `showdown-analyst` is the project's only role. It has `USAGE` on `reference` and `SELECT` and `INSERT` on its tables, including future tables through default privileges; it has no `UPDATE`, `DELETE`, DDL, or `defaultdb` access. Its grants are in `sql/permissions/showdown_analyst.sql`. `doadmin` owns all project objects and is used only to run SQL files. `PUBLIC` keeps PostgreSQL's default `CONNECT` and `TEMP` on `showdown-database` but has no `CONNECT` on `defaultdb`. Private research must never be reachable from public endpoints.
 
@@ -100,14 +73,14 @@ The intended connection path is Mac → Tailscale subnet router → PostgreSQL p
 | Terraform | Supported cloud resources, networking, service configuration, and infrastructure drift |
 | SQL files (`sql/`) | Schemas, tables, relationships, constraints, indexes, database roles, and grants |
 
-The Terraform workflow adopts manually created services through matching resource definitions and `terraform import`. A refreshed plan showing no changes establishes configuration parity for managed attributes. Remote state is kept outside Git with restricted access and a documented locking approach. Unsupported resources and cloud-managed database users have explicit ownership to prevent conflicts with SQL migrations. Terraform adoption is planned for M6, once the remaining services are deployed.
+Terraform adoption is planned for M6: services are imported into matching configuration until a refreshed plan reports no changes, with remote state kept outside Git.
 
 ## Applying SQL Changes
 
 SQL is applied by hand; nothing runs it automatically.
 
 1. Add or edit one file per table, index, or role in `sql/create/`, `sql/index/`, or `sql/permissions/`.
-2. Run new files as `doadmin` in TablePlus against `showdown-database`: schemas, then tables in foreign-key order, then indexes, then permissions. The full order is `SQL_FILES` in `tests/pipelines/conftest.py`, which CI uses to build its test database.
+2. Run new files as `doadmin` in TablePlus against `showdown-database`: schemas, then tables in foreign-key order, then indexes, then permissions. `SQL_FILES` in `tests/pipelines/conftest.py` lists the create and index order, which CI uses to build its test database; permissions run last.
 3. Grant files only add privileges. When removing one, run a one-time `REVOKE` and update the file to match.
 4. Verify as `showdown-analyst`, then update this document's deployed state.
 
