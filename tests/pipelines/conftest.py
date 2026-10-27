@@ -31,6 +31,8 @@ SQL_FILES = [
     "create/raw/chaos_counter.sql",
     "create/raw/usage_report.sql",
     "create/raw/usage_pokemon.sql",
+    "create/raw/leads_report.sql",
+    "create/raw/leads_pokemon.sql",
 ]
 PROTECTED_DATABASES = {"showdown-database", "defaultdb"}
 
