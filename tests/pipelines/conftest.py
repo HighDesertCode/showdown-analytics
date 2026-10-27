@@ -13,22 +13,22 @@ import pytest
 SQL_DIR = Path(__file__).resolve().parents[2] / "sql"
 # Foreign-key order; the same order used to run these files manually against showdown-database.
 SQL_FILES = [
-    "create/schema_reference.sql",
-    "create/reference_type.sql",
-    "create/reference_species.sql",
-    "create/reference_ability.sql",
-    "create/reference_species_ability.sql",
-    "create/reference_move.sql",
-    "create/reference_move_effect.sql",
-    "create/reference_item.sql",
-    "create/reference_nature.sql",
-    "index/reference_species_ability.sql",
-    "create/schema_raw.sql",
-    "create/raw_source_file.sql",
-    "create/raw_chaos_report.sql",
-    "create/raw_chaos_pokemon.sql",
-    "create/raw_chaos_option.sql",
-    "create/raw_chaos_counter.sql",
+    "create/reference/schema.sql",
+    "create/reference/type.sql",
+    "create/reference/species.sql",
+    "create/reference/ability.sql",
+    "create/reference/species_ability.sql",
+    "create/reference/move.sql",
+    "create/reference/move_effect.sql",
+    "create/reference/item.sql",
+    "create/reference/nature.sql",
+    "index/reference/species_ability.sql",
+    "create/raw/schema.sql",
+    "create/raw/source_file.sql",
+    "create/raw/chaos_report.sql",
+    "create/raw/chaos_pokemon.sql",
+    "create/raw/chaos_option.sql",
+    "create/raw/chaos_counter.sql",
 ]
 PROTECTED_DATABASES = {"showdown-database", "defaultdb"}
 
