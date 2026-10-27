@@ -23,6 +23,8 @@ SQL_FILES = [
     "create/reference_item.sql",
     "create/reference_nature.sql",
     "index/reference_species_ability.sql",
+    "create/schema_raw.sql",
+    "create/raw_source_file.sql",
 ]
 PROTECTED_DATABASES = {"showdown-database", "defaultdb"}
 
