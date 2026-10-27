@@ -1,7 +1,7 @@
 """Fixtures for tests that need a real PostgreSQL database.
 
 They run only when TEST_DATABASE_URL points at a disposable database (CI provides one) and are skipped
-otherwise. The reference schema is dropped and rebuilt from sql/, so never point it at a real database.
+otherwise. The project's schemas are dropped and rebuilt from sql/, so never point it at a real database.
 """
 
 import os
@@ -42,17 +42,17 @@ def database_url() -> str:
 
 
 @pytest.fixture(scope="session")
-def reference_schema(database_url: str) -> None:
+def schemas(database_url: str) -> None:
     with psycopg.connect(database_url, autocommit=True) as conn:
         if conn.info.dbname in PROTECTED_DATABASES:
-            raise RuntimeError(f"Refusing to rebuild the reference schema in {conn.info.dbname}")
-        conn.execute("DROP SCHEMA IF EXISTS reference CASCADE")
+            raise RuntimeError(f"Refusing to rebuild schemas in {conn.info.dbname}")
+        conn.execute("DROP SCHEMA IF EXISTS raw, reference CASCADE")
         for name in SQL_FILES:
             conn.execute((SQL_DIR / name).read_bytes())
 
 
 @pytest.fixture
-def conn(database_url: str, reference_schema: None):
+def conn(database_url: str, schemas: None):
     """A connection whose changes are rolled back after each test."""
     with psycopg.connect(database_url) as connection:
         yield connection
