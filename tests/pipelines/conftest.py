@@ -25,6 +25,10 @@ SQL_FILES = [
     "index/reference_species_ability.sql",
     "create/schema_raw.sql",
     "create/raw_source_file.sql",
+    "create/raw_chaos_report.sql",
+    "create/raw_chaos_pokemon.sql",
+    "create/raw_chaos_option.sql",
+    "create/raw_chaos_counter.sql",
 ]
 PROTECTED_DATABASES = {"showdown-database", "defaultdb"}
 
