@@ -17,6 +17,7 @@ FAMILIES = {
     "chaos": ("chaos/", "json"),
     "usage": ("", "txt"),
     "leads": ("leads/", "txt"),
+    "metagame": ("metagame/", "txt"),
 }
 
 

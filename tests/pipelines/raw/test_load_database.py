@@ -13,11 +13,13 @@ from pipelines.raw.common import ReportFormatError
 from pipelines.raw.load import load_file
 from tests.pipelines.raw.test_chaos import REPORT
 from tests.pipelines.raw.test_leads import REPORT as LEADS_REPORT
+from tests.pipelines.raw.test_metagame import REPORT as METAGAME_REPORT
 from tests.pipelines.raw.test_usage import REPORT as USAGE_REPORT
 
 OVERALL = smogon.report_files("chaos", date(2026, 9, 1), [])[0]
 USAGE_OVERALL = smogon.report_files("usage", date(2026, 9, 1), [])[0]
 LEADS_OVERALL = smogon.report_files("leads", date(2026, 9, 1), [])[0]
+METAGAME_OVERALL = smogon.report_files("metagame", date(2026, 9, 1), [])[0]
 
 
 def serve(monkeypatch, report: dict) -> None:
@@ -26,7 +28,7 @@ def serve(monkeypatch, report: dict) -> None:
 
 def table_counts(conn) -> dict[str, int]:
     tables = ["source_file", "chaos_report", "chaos_pokemon", "chaos_option", "chaos_counter"]
-    tables += ["usage_report", "usage_pokemon", "leads_report", "leads_pokemon"]
+    tables += ["usage_report", "usage_pokemon", "leads_report", "leads_pokemon", "metagame_report", "metagame_tag"]
     return {table: conn.execute(f"SELECT count(*) FROM raw.{table}").fetchone()[0] for table in tables}
 
 
@@ -44,6 +46,8 @@ def test_load_file_fills_every_table(conn, monkeypatch):
         "usage_pokemon": 0,
         "leads_report": 0,
         "leads_pokemon": 0,
+        "metagame_report": 0,
+        "metagame_tag": 0,
     }
     assert conn.execute(
         "SELECT o.weight FROM raw.chaos_option o JOIN raw.chaos_pokemon p USING (chaos_pokemon_id)"
@@ -106,3 +110,11 @@ def test_load_file_loads_a_leads_report(conn, monkeypatch):
         Decimal("3.48046"),
         2354,
     )
+
+
+def test_load_file_loads_a_metagame_report(conn, monkeypatch):
+    monkeypatch.setattr(source_file.download, "fetch", lambda url: METAGAME_REPORT.encode())
+
+    assert load_file(conn, METAGAME_OVERALL, None) == {"tags": 3}
+    assert conn.execute("SELECT stalliness_mean FROM raw.metagame_report").fetchone() == (Decimal("1.730"),)
+    assert conn.execute("SELECT percent FROM raw.metagame_tag WHERE tag = 'stall'").fetchone() == (Decimal("52.49034"),)

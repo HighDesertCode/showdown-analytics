@@ -49,7 +49,7 @@ def test_load_smogon_rejects_invalid_month(monkeypatch):
 @pytest.mark.parametrize(
     ("arguments", "families"),
     [
-        ([], ["chaos", "usage", "leads"]),
+        ([], ["chaos", "usage", "leads", "metagame"]),
         (["--family", "usage"], ["usage"]),
         (["--family", "usage", "--family", "chaos"], ["usage", "chaos"]),
     ],

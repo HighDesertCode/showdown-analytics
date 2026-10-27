@@ -63,3 +63,13 @@ def test_leads_urls():
         smogon.url("leads", SEPTEMBER, 1760, "water")
         == "https://www.smogon.com/stats/2026-09/monotype/leads/gen9monotype-monowater-1760.txt"
     )
+
+
+def test_metagame_urls():
+    assert (
+        smogon.url("metagame", SEPTEMBER, 1630) == "https://www.smogon.com/stats/2026-09/metagame/gen9monotype-1630.txt"
+    )
+    assert (
+        smogon.url("metagame", SEPTEMBER, 1760, "water")
+        == "https://www.smogon.com/stats/2026-09/monotype/metagame/gen9monotype-monowater-1760.txt"
+    )

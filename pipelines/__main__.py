@@ -35,6 +35,7 @@ def load_smogon(month: date, families: list[str]) -> None:
         type_ids = existing_ids(conn, "type")
         team_types = sorted(type_ids, key=type_ids.__getitem__)
         files = [file for family in families for file in smogon.report_files(family, month, team_types)]
+        width = max(len(family) for family in families)
         for file in files:
             counts = load_file(conn, file, type_ids.get(file.team_type) if file.team_type else None)
             # Commit each file on its own: a later failure keeps earlier files, and a rerun skips them.
@@ -44,7 +45,7 @@ def load_smogon(month: date, families: list[str]) -> None:
                 result = "skipped (already loaded)"
             else:
                 result = "loaded " + "  ".join(f"{count:>6,} {table}" for table, count in counts.items())
-            print(f"{file.family:<6} {scope:<14} {file.baseline}  {result}")
+            print(f"{file.family:<{width}} {scope:<14} {file.baseline}  {result}")
 
 
 def main() -> None:
