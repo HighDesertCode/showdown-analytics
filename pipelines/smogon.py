@@ -12,12 +12,22 @@ STATS_URL = "https://www.smogon.com/stats"
 FORMAT = "gen9monotype"
 BASELINES = (1630, 1760)
 
-# Each family's directory and file extension within a month's folder.
+
+@dataclass(frozen=True)
+class Family:
+    """Where a report family's files live within a month's folder."""
+
+    overall: str  # Path of the overall report.
+    team_type: str | None  # Path of each per-type report, or None if the family has none.
+
+
 FAMILIES = {
-    "chaos": ("chaos/", "json"),
-    "usage": ("", "txt"),
-    "leads": ("leads/", "txt"),
-    "metagame": ("metagame/", "txt"),
+    "chaos": Family("chaos/{format}-{baseline}.json", "monotype/chaos/{format}-mono{team_type}-{baseline}.json"),
+    "usage": Family("{format}-{baseline}.txt", "monotype/{format}-mono{team_type}-{baseline}.txt"),
+    "leads": Family("leads/{format}-{baseline}.txt", "monotype/leads/{format}-mono{team_type}-{baseline}.txt"),
+    "metagame": Family("metagame/{format}-{baseline}.txt", "monotype/metagame/{format}-mono{team_type}-{baseline}.txt"),
+    # One chart covers every type pairing, so there are no per-type charts.
+    "matchup_chart": Family("monotype/matchupcharts/{format}-matchup_chart-{baseline}.txt", None),
 }
 
 
@@ -39,20 +49,20 @@ def parse_month(text: str) -> date:
 
 
 def url(family: str, month: date, baseline: int, team_type: str | None = None, format: str = FORMAT) -> str:
-    directory, extension = FAMILIES[family]
-    if team_type is None:
-        path = f"{directory}{format}-{baseline}.{extension}"
-    else:
-        path = f"monotype/{directory}{format}-mono{team_type}-{baseline}.{extension}"
-    return f"{STATS_URL}/{month:%Y-%m}/{path}"
+    paths = FAMILIES[family]
+    path = paths.overall if team_type is None else paths.team_type
+    if path is None:
+        raise ValueError(f"{family} has no per-type reports")
+    return f"{STATS_URL}/{month:%Y-%m}/" + path.format(format=format, baseline=baseline, team_type=team_type)
 
 
 def report_files(
     family: str, month: date, team_types: list[str], format: str = FORMAT, baselines: tuple[int, ...] = BASELINES
 ) -> list[ReportFile]:
     """Lists one family's files for a month: the overall report plus one per team type, at each baseline."""
+    scopes = [None, *team_types] if FAMILIES[family].team_type else [None]
     return [
         ReportFile(family, format, month, baseline, team_type, url(family, month, baseline, team_type, format))
         for baseline in baselines
-        for team_type in [None, *team_types]
+        for team_type in scopes
     ]

@@ -13,6 +13,7 @@ from pipelines.raw.common import ReportFormatError
 from pipelines.raw.load import load_file
 from tests.pipelines.raw.test_chaos import REPORT
 from tests.pipelines.raw.test_leads import REPORT as LEADS_REPORT
+from tests.pipelines.raw.test_matchup_chart import REPORT as MATCHUP_CHART_REPORT
 from tests.pipelines.raw.test_metagame import REPORT as METAGAME_REPORT
 from tests.pipelines.raw.test_usage import REPORT as USAGE_REPORT
 
@@ -20,6 +21,7 @@ OVERALL = smogon.report_files("chaos", date(2026, 9, 1), [])[0]
 USAGE_OVERALL = smogon.report_files("usage", date(2026, 9, 1), [])[0]
 LEADS_OVERALL = smogon.report_files("leads", date(2026, 9, 1), [])[0]
 METAGAME_OVERALL = smogon.report_files("metagame", date(2026, 9, 1), [])[0]
+MATCHUP_CHART = smogon.report_files("matchup_chart", date(2026, 9, 1), [])[0]
 
 
 def serve(monkeypatch, report: dict) -> None:
@@ -29,6 +31,7 @@ def serve(monkeypatch, report: dict) -> None:
 def table_counts(conn) -> dict[str, int]:
     tables = ["source_file", "chaos_report", "chaos_pokemon", "chaos_option", "chaos_counter"]
     tables += ["usage_report", "usage_pokemon", "leads_report", "leads_pokemon", "metagame_report", "metagame_tag"]
+    tables += ["matchup_chart_report", "matchup_chart_cell", "matchup_chart_viability"]
     return {table: conn.execute(f"SELECT count(*) FROM raw.{table}").fetchone()[0] for table in tables}
 
 
@@ -48,6 +51,9 @@ def test_load_file_fills_every_table(conn, monkeypatch):
         "leads_pokemon": 0,
         "metagame_report": 0,
         "metagame_tag": 0,
+        "matchup_chart_report": 0,
+        "matchup_chart_cell": 0,
+        "matchup_chart_viability": 0,
     }
     assert conn.execute(
         "SELECT o.weight FROM raw.chaos_option o JOIN raw.chaos_pokemon p USING (chaos_pokemon_id)"
@@ -118,3 +124,15 @@ def test_load_file_loads_a_metagame_report(conn, monkeypatch):
     assert load_file(conn, METAGAME_OVERALL, None) == {"tags": 3}
     assert conn.execute("SELECT stalliness_mean FROM raw.metagame_report").fetchone() == (Decimal("1.730"),)
     assert conn.execute("SELECT percent FROM raw.metagame_tag WHERE tag = 'stall'").fetchone() == (Decimal("52.49034"),)
+
+
+def test_load_file_loads_a_matchup_chart(conn, monkeypatch):
+    monkeypatch.setattr(source_file.download, "fetch", lambda url: MATCHUP_CHART_REPORT.encode())
+
+    assert load_file(conn, MATCHUP_CHART, None) == {"cells": 4, "types": 2}
+    assert conn.execute(
+        "SELECT wins, win_percent FROM raw.matchup_chart_cell WHERE type = 'water' AND opponent_type = 'ground'"
+    ).fetchone() == (Decimal("71.16"), Decimal("72.636"))
+    assert conn.execute("SELECT viability_score FROM raw.matchup_chart_viability WHERE type = 'ground'").fetchone() == (
+        Decimal("2.412"),
+    )

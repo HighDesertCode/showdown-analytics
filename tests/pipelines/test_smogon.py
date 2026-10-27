@@ -73,3 +73,18 @@ def test_metagame_urls():
         smogon.url("metagame", SEPTEMBER, 1760, "water")
         == "https://www.smogon.com/stats/2026-09/monotype/metagame/gen9monotype-monowater-1760.txt"
     )
+
+
+def test_matchup_chart_has_only_overall_files():
+    files = smogon.report_files("matchup_chart", SEPTEMBER, ["water", "fire"])
+
+    assert [(file.baseline, file.team_type) for file in files] == [(1630, None), (1760, None)]
+    assert (
+        files[0].url
+        == "https://www.smogon.com/stats/2026-09/monotype/matchupcharts/gen9monotype-matchup_chart-1630.txt"
+    )
+
+
+def test_url_rejects_team_type_for_matchup_chart():
+    with pytest.raises(ValueError, match="no per-type reports"):
+        smogon.url("matchup_chart", SEPTEMBER, 1630, "water")
