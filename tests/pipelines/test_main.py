@@ -1,3 +1,5 @@
+from datetime import date
+
 import pytest
 
 from pipelines import __main__ as cli
@@ -37,6 +39,33 @@ def test_unknown_command_exits(monkeypatch):
 
 def test_load_smogon_rejects_invalid_month(monkeypatch):
     monkeypatch.setattr("sys.argv", ["pipelines", "load-smogon", "September"])
+
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main()
+
+    assert exit_info.value.code == 2
+
+
+@pytest.mark.parametrize(
+    ("arguments", "families"),
+    [
+        ([], ["chaos", "usage"]),
+        (["--family", "usage"], ["usage"]),
+        (["--family", "usage", "--family", "chaos"], ["usage", "chaos"]),
+    ],
+)
+def test_load_smogon_families(monkeypatch, arguments, families):
+    calls = []
+    monkeypatch.setattr(cli, "load_smogon", lambda month, families: calls.append((month, families)))
+    monkeypatch.setattr("sys.argv", ["pipelines", "load-smogon", "2026-09", *arguments])
+
+    cli.main()
+
+    assert calls == [(date(2026, 9, 1), families)]
+
+
+def test_load_smogon_rejects_unknown_family(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["pipelines", "load-smogon", "2026-09", "--family", "moveset"])
 
     with pytest.raises(SystemExit) as exit_info:
         cli.main()
