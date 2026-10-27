@@ -33,6 +33,8 @@ SQL_FILES = [
     "create/raw/usage_pokemon.sql",
     "create/raw/leads_report.sql",
     "create/raw/leads_pokemon.sql",
+    "create/raw/metagame_report.sql",
+    "create/raw/metagame_tag.sql",
 ]
 PROTECTED_DATABASES = {"showdown-database", "defaultdb"}
 
