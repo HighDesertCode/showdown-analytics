@@ -8,6 +8,8 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from psycopg import Connection, sql
+
 from pipelines.smogon import ReportFile
 
 INFO_KEYS = {"metagame", "cutoff", "cutoff deviation", "team type", "number of battles"}
@@ -108,6 +110,52 @@ def mapping(value: Any, where: str) -> dict:
     if not isinstance(value, dict):
         raise ChaosFormatError(f"{where}: expected an object")
     return value
+
+
+def load(conn: Connection, source_file_id: int, report: ChaosReport) -> dict[str, int]:
+    """Inserts a parsed report under an existing source_file row; returns the rows inserted per table."""
+    conn.execute(
+        "INSERT INTO raw.chaos_report (source_file_id, metagame, cutoff, cutoff_deviation, team_type, battle_count)"
+        " VALUES (%s, %s, %s, %s, %s, %s)",
+        (source_file_id, *report.info),
+    )
+    copy_rows(
+        conn,
+        "chaos_pokemon",
+        ["source_file_id", "pokemon", "raw_count", "usage"]
+        + ["viability_user_count", "viability_top_gxe", "viability_gxe_p99", "viability_gxe_p95"],
+        [(source_file_id, *row) for row in report.pokemon],
+    )
+    # Options and counters reference chaos_pokemon_id, which the database assigned during the copy above.
+    ids = dict(
+        conn.execute(
+            "SELECT pokemon, chaos_pokemon_id FROM raw.chaos_pokemon WHERE source_file_id = %s", (source_file_id,)
+        ).fetchall()
+    )
+    copy_rows(
+        conn,
+        "chaos_option",
+        ["chaos_pokemon_id", "category", "label", "weight"],
+        [(ids[name], *rest) for name, *rest in report.options],
+    )
+    copy_rows(
+        conn,
+        "chaos_counter",
+        ["chaos_pokemon_id", "opponent", "n", "p", "d"],
+        [(ids[name], *rest) for name, *rest in report.counters],
+    )
+    return {"pokemon": len(report.pokemon), "options": len(report.options), "counters": len(report.counters)}
+
+
+def copy_rows(conn: Connection, table: str, columns: list[str], rows: list[tuple]) -> None:
+    """Streams rows into a raw table with COPY, which is far faster than one INSERT per row."""
+    query = sql.SQL("COPY raw.{table} ({columns}) FROM STDIN").format(
+        table=sql.Identifier(table),
+        columns=sql.SQL(", ").join(map(sql.Identifier, columns)),
+    )
+    with conn.cursor() as cursor, cursor.copy(query) as copy:
+        for row in rows:
+            copy.write_row(row)
 
 
 # bool is a subclass of int in Python, so both checks exclude it explicitly.

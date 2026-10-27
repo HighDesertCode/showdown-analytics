@@ -33,3 +33,12 @@ def test_unknown_command_exits(monkeypatch):
         cli.main()
 
     assert exit_info.value.code == 2
+
+
+def test_load_smogon_rejects_invalid_month(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["pipelines", "load-smogon", "September"])
+
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main()
+
+    assert exit_info.value.code == 2
