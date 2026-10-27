@@ -8,7 +8,7 @@ See `REPORT.md` for research context and data interpretation. Always preserve so
 
 All services run on DigitalOcean. Notion is used separately for personal notes. This is the intended architecture; only what `docs/database-architecture.md` lists as deployed actually exists. Stay within the current milestone (M1: database foundation).
 
-- **Database:** Managed PostgreSQL. Project data goes in `showdown-database` via `showdown-analyst`; never use `defaultdb` or infer the database/user from cluster defaults. Schema changes go through SQL migrations run by a separate DDL-privileged account.
+- **Database:** Managed PostgreSQL. Project data goes in `showdown-database` via `showdown-analyst`; never use `defaultdb` or infer the database/user from cluster defaults. Schema changes are SQL files run manually by `doadmin`; `showdown-analyst` has no DDL rights.
 - **Developer access:** Tailscale subnet router on a Droplet in the database VPC, plus trusted sources and TLS with certificate verification.
 - **Planned:** Spaces (raw archives), Python collectors run locally then on App Platform (with scheduling), a read-only FastAPI service, a Streamlit site and a public CLI that both consume only that API, and private research storage that is never reachable from public endpoints.
 
@@ -19,7 +19,7 @@ All services run on DigitalOcean. Notion is used separately for personal notes. 
 # Development
 
 - **Layout:** One top-level directory per product: `pipelines/` (internal data loading; the only code that writes to the database), and later `api/`, `web/`, and `cli/` (the public CLI, which uses only the API). Tests mirror it under `tests/<product>/`.
-- **SQL:** `sql/create/`, `sql/index/`, and `sql/permissions/` hold one file per table or role, run manually as `doadmin` in foreign-key order. No migration tooling yet.
+- **SQL:** `sql/create/`, `sql/index/`, and `sql/permissions/` hold one file per table or role, run manually as `doadmin` in foreign-key order. No migration tooling yet (see *Applying SQL Changes* in `docs/database-architecture.md`).
 - **Reference data:** Showdown's own data files are the source of truth (not PokeAPI). Loaders insert only new rows, skipping existing `showdown_id`s up front rather than using `ON CONFLICT`, and run in one transaction.
 - **Running pipelines:** `uv run --env-file .env pipelines <command>`; `.env` holds libpq `PG*` variables with `PGSSLMODE=verify-full`.
 - **Tooling:** pytest, Ruff (120-character lines; rules `E`, `F`, `I`, `UP`, `B`), and ty (beta, pinned to an exact version). Before committing:
