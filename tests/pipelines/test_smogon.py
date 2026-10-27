@@ -55,3 +55,11 @@ def test_usage_urls():
         smogon.url("usage", SEPTEMBER, 1760, "water")
         == "https://www.smogon.com/stats/2026-09/monotype/gen9monotype-monowater-1760.txt"
     )
+
+
+def test_leads_urls():
+    assert smogon.url("leads", SEPTEMBER, 1630) == "https://www.smogon.com/stats/2026-09/leads/gen9monotype-1630.txt"
+    assert (
+        smogon.url("leads", SEPTEMBER, 1760, "water")
+        == "https://www.smogon.com/stats/2026-09/monotype/leads/gen9monotype-monowater-1760.txt"
+    )

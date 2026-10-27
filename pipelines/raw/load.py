@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 from psycopg import Connection
 
-from pipelines.raw import chaos, source_file, usage
+from pipelines.raw import chaos, leads, source_file, usage
 from pipelines.raw.common import Report, ReportFormatError
 from pipelines.smogon import ReportFile
 
@@ -12,6 +12,7 @@ from pipelines.smogon import ReportFile
 PARSERS: dict[str, Callable[[bytes, ReportFile], Report]] = {
     "chaos": chaos.parse,
     "usage": lambda content, file: usage.parse(content),
+    "leads": lambda content, file: leads.parse(content),
 }
 
 

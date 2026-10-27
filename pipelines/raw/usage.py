@@ -1,16 +1,12 @@
 """Validates Smogon's usage text reports and turns them into rows for the raw.usage_* tables.
 
-A report is two header lines and a bordered table:
+A report is two header lines followed by a table (see text_table):
 
     Total battles: 63572
     Avg. weight/team: 0.192
     + ---- + ------------------ + --------- + ------ + ------- + ------ + ------- +
     | Rank | Pokemon            | Usage %   | Raw    | %       | Real   | %       |
-    + ---- + ------------------ + --------- + ------ + ------- + ------ + ------- +
-    | 1    | Dragapult          | 15.95180% | 15179  | 11.938% | 11396  | 11.603% |
-    + ---- + ------------------ + --------- + ------ + ------- + ------ + ------- +
-
-Long names can push a row out of alignment, so rows are split on "|" rather than read by position.
+    ...
 """
 
 import re
@@ -19,14 +15,12 @@ from decimal import Decimal
 
 from psycopg import Connection
 
+from pipelines.raw import text_table
 from pipelines.raw.common import ReportFormatError, copy_rows
 
-HEADER = ["Rank", "Pokemon", "Usage %", "Raw", "%", "Real", "%"]
-BORDER = re.compile(r"\+( -+ \+)+")
+COLUMNS = ["Rank", "Pokemon", "Usage %", "Raw", "%", "Real", "%"]
 TOTAL_BATTLES = re.compile(r"Total battles: (\d+)")
 AVG_TEAM_WEIGHT = re.compile(r"Avg\. weight/team: (\d+\.\d+)")
-INTEGER = re.compile(r"\d+")
-PERCENT = re.compile(r"(\d+\.\d+)%")
 
 
 @dataclass(frozen=True)
@@ -52,45 +46,20 @@ class UsageReport:
 
 def parse(content: bytes) -> UsageReport:
     lines = content.decode("utf-8").splitlines()
-    if len(lines) < 6:
-        raise ReportFormatError(f"expected at least 6 lines, got {len(lines)}")
-    battle_count = int(match(TOTAL_BATTLES, lines[0], 1).group(1))
-    avg_team_weight = Decimal(match(AVG_TEAM_WEIGHT, lines[1], 2).group(1))
-    for number in (3, 5, len(lines)):
-        match(BORDER, lines[number - 1], number)
-    if cells(lines[3], 4) != HEADER:
-        raise ReportFormatError(f"line 4: expected columns {HEADER}, got {cells(lines[3], 4)}")
-
-    pokemon = []
-    for number, line in enumerate(lines[5:-1], start=6):
-        rank, name, usage, raw, raw_percent, real, real_percent = cells(line, number)
-        pokemon.append(
-            (
-                int(match(INTEGER, rank, number).group()),
-                name,
-                Decimal(match(PERCENT, usage, number).group(1)),
-                int(match(INTEGER, raw, number).group()),
-                Decimal(match(PERCENT, raw_percent, number).group(1)),
-                int(match(INTEGER, real, number).group()),
-                Decimal(match(PERCENT, real_percent, number).group(1)),
-            )
+    if len(lines) < 2:
+        raise ReportFormatError(f"expected header lines, got {len(lines)} lines")
+    battle_count = int(text_table.match(TOTAL_BATTLES, lines[0], 1).group(1))
+    avg_team_weight = Decimal(text_table.match(AVG_TEAM_WEIGHT, lines[1], 2).group(1))
+    pokemon = [
+        (
+            text_table.integer(rank, number),
+            name,
+            text_table.percent(usage, number),
+            text_table.integer(raw, number),
+            text_table.percent(raw_percent, number),
+            text_table.integer(real, number),
+            text_table.percent(real_percent, number),
         )
+        for number, (rank, name, usage, raw, raw_percent, real, real_percent) in text_table.rows(lines, 2, COLUMNS)
+    ]
     return UsageReport((battle_count, avg_team_weight), pokemon)
-
-
-def cells(line: str, number: int) -> list[str]:
-    """Splits a "| a | b |" table row into its seven stripped cells."""
-    if not (line.startswith("|") and line.endswith("|")):
-        raise ReportFormatError(f"line {number}: expected a table row, got {line!r}")
-    values = [cell.strip() for cell in line[1:-1].split("|")]
-    if len(values) != len(HEADER):
-        raise ReportFormatError(f"line {number}: expected {len(HEADER)} cells, got {len(values)}")
-    return values
-
-
-def match(pattern: re.Pattern[str], text: str, number: int) -> re.Match[str]:
-    """Matches the whole text against the pattern, or raises an error naming the line."""
-    result = pattern.fullmatch(text)
-    if result is None:
-        raise ReportFormatError(f"line {number}: expected {pattern.pattern!r}, got {text!r}")
-    return result

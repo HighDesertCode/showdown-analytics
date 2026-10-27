@@ -12,10 +12,12 @@ from pipelines.raw import source_file
 from pipelines.raw.common import ReportFormatError
 from pipelines.raw.load import load_file
 from tests.pipelines.raw.test_chaos import REPORT
+from tests.pipelines.raw.test_leads import REPORT as LEADS_REPORT
 from tests.pipelines.raw.test_usage import REPORT as USAGE_REPORT
 
 OVERALL = smogon.report_files("chaos", date(2026, 9, 1), [])[0]
 USAGE_OVERALL = smogon.report_files("usage", date(2026, 9, 1), [])[0]
+LEADS_OVERALL = smogon.report_files("leads", date(2026, 9, 1), [])[0]
 
 
 def serve(monkeypatch, report: dict) -> None:
@@ -24,7 +26,7 @@ def serve(monkeypatch, report: dict) -> None:
 
 def table_counts(conn) -> dict[str, int]:
     tables = ["source_file", "chaos_report", "chaos_pokemon", "chaos_option", "chaos_counter"]
-    tables += ["usage_report", "usage_pokemon"]
+    tables += ["usage_report", "usage_pokemon", "leads_report", "leads_pokemon"]
     return {table: conn.execute(f"SELECT count(*) FROM raw.{table}").fetchone()[0] for table in tables}
 
 
@@ -40,6 +42,8 @@ def test_load_file_fills_every_table(conn, monkeypatch):
         "chaos_counter": 1,
         "usage_report": 0,
         "usage_pokemon": 0,
+        "leads_report": 0,
+        "leads_pokemon": 0,
     }
     assert conn.execute(
         "SELECT o.weight FROM raw.chaos_option o JOIN raw.chaos_pokemon p USING (chaos_pokemon_id)"
@@ -88,3 +92,17 @@ def test_load_file_loads_a_usage_report(conn, monkeypatch):
     assert conn.execute(
         "SELECT rank, usage_percent, real_count FROM raw.usage_pokemon WHERE pokemon = 'Ogerpon-Hearthflame'"
     ).fetchone() == (46, Decimal("4.73609"), 5412)
+
+
+def test_load_file_loads_a_leads_report(conn, monkeypatch):
+    monkeypatch.setattr(source_file.download, "fetch", lambda url: LEADS_REPORT.encode())
+
+    assert load_file(conn, LEADS_OVERALL, None) == {"pokemon": 2}
+    assert conn.execute("SELECT lead_count FROM raw.leads_report").fetchone() == (127144,)
+    assert conn.execute(
+        "SELECT rank, usage_percent, raw_count FROM raw.leads_pokemon WHERE pokemon = 'Ting-Lu'"
+    ).fetchone() == (
+        2,
+        Decimal("3.48046"),
+        2354,
+    )
