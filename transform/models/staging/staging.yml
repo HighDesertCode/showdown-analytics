@@ -27,3 +27,53 @@ models:
               arguments:
                 to: source('reference', 'species')
                 field: species_id
+
+  - name: stg_leads_pokemon
+    description: Leads report rows matched to reference.species.
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "source_file_id || '-' || species_id"
+    columns:
+      - name: species_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: source('reference', 'species')
+                field: species_id
+
+  - name: stg_metagame_report
+    description: Average stalliness per metagame report.
+    columns:
+      - name: source_file_id
+        data_tests: [unique, not_null]
+
+  - name: stg_metagame_tag
+    description: Metagame tags, with type tags matched to reference.type.
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "source_file_id || '-' || tag"
+
+  - name: stg_matchup_chart_cell
+    description: Matchup chart cells matched to reference.type.
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "source_file_id || '-' || type_id || '-' || opponent_type_id"
+    columns:
+      - name: type_id
+        data_tests: [not_null]
+      - name: opponent_type_id
+        data_tests: [not_null]
+
+  - name: stg_matchup_chart_viability
+    description: Smogon's ViabilityScore per type, matched to reference.type.
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "source_file_id || '-' || type_id"
+    columns:
+      - name: type_id
+        data_tests: [not_null]
