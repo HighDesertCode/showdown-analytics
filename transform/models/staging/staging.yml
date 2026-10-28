@@ -1,0 +1,29 @@
+models:
+  - name: stg_source_file
+    description: The latest version of each Smogon file.
+    columns:
+      - name: source_file_id
+        data_tests: [unique, not_null]
+      - name: url
+        data_tests: [unique, not_null]
+      - name: family
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [chaos, usage, leads, metagame, matchup_chart]
+
+  - name: stg_usage_pokemon
+    description: Usage report rows matched to reference.species.
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "source_file_id || '-' || species_id"
+    columns:
+      - name: species_id
+        description: Null when Smogon's name matches no species; the not_null test turns that into a failure.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: source('reference', 'species')
+                field: species_id

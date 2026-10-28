@@ -1,0 +1,26 @@
+# Tables dbt reads but does not build: reference (loaded from Showdown) and raw (loaded from Smogon).
+sources:
+  - name: reference
+    tables:
+      - name: type
+      - name: species
+      - name: ability
+      - name: item
+      - name: move
+      - name: nature
+  - name: raw
+    tables:
+      - name: source_file
+      - name: chaos_report
+      - name: chaos_pokemon
+      - name: chaos_option
+      - name: chaos_counter
+      - name: usage_report
+      - name: usage_pokemon
+      - name: leads_report
+      - name: leads_pokemon
+      - name: metagame_report
+      - name: metagame_tag
+      - name: matchup_chart_report
+      - name: matchup_chart_cell
+      - name: matchup_chart_viability
