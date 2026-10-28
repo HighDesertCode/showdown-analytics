@@ -1,0 +1,44 @@
+models:
+  - name: report
+    description: >
+      One row per report scope (format, month, baseline, and team type), with its sample size and the
+      Smogon file behind each report family. A scope missing a family has a null file for it.
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "format || '-' || report_month || '-' || baseline || '-' || coalesce(team_type, 'overall')"
+    columns:
+      - name: format
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: report_month
+        description: First day of the month.
+        data_type: date
+        constraints: [{type: not_null}]
+      - name: baseline
+        description: The rating baseline teams are weighted by, e.g. 1630 or 1760.
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: team_type
+        description: The team type's Showdown ID, e.g. water; null for overall reports.
+        data_type: text
+      - name: battle_count
+        description: Battles in the whole format that month; per-type reports repeat the overall total.
+        data_type: integer
+      - name: avg_team_weight
+        description: Average weight per team; small values mean few teams count toward this baseline.
+        data_type: numeric
+      - name: stalliness_mean
+        description: Average stalliness; negative means more offensive teams, positive more defensive.
+        data_type: numeric
+      - name: usage_source_file_id
+        data_type: bigint
+      - name: chaos_source_file_id
+        data_type: bigint
+      - name: leads_source_file_id
+        data_type: bigint
+      - name: metagame_source_file_id
+        data_type: bigint

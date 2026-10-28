@@ -28,6 +28,12 @@ models:
                 to: source('reference', 'species')
                 field: species_id
 
+  - name: stg_usage_report
+    description: Battle count and average weight per team for each usage report.
+    columns:
+      - name: source_file_id
+        data_tests: [unique, not_null]
+
   - name: stg_leads_pokemon
     description: Leads report rows matched to reference.species.
     data_tests:
