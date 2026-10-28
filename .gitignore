@@ -224,3 +224,9 @@ __marimo__/
 *.pem
 *.key
 *.crt
+
+# dbt (transform/)
+transform/target/
+transform/logs/
+transform/dbt_packages/
+transform/.user.yml

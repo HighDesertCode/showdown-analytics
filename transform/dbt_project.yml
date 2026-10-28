@@ -1,0 +1,20 @@
+# Builds the staging and api schemas from raw and reference. See profiles.yml for the connection.
+name: showdown_analytics
+version: "1.0.0"
+profile: showdown_analytics
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+clean-targets: ["target", "dbt_packages"]
+
+flags:
+  send_anonymous_usage_stats: false
+
+models:
+  showdown_analytics:
+    staging:
+      +schema: staging
+      +materialized: view
+    api:
+      +schema: api
+      +materialized: table
