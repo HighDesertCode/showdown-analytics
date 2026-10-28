@@ -42,3 +42,79 @@ models:
         data_type: bigint
       - name: metagame_source_file_id
         data_type: bigint
+
+  - name: pokemon_usage
+    description: >
+      One row per Pokémon in each report scope, with its usage rank and shares and, where chaos lists it,
+      its viability ceiling.
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "format || '-' || report_month || '-' || baseline || '-' || coalesce(team_type, 'overall') || '-' || species_id"
+    columns:
+      - name: format
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: report_month
+        data_type: date
+        constraints: [{type: not_null}]
+      - name: baseline
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: team_type
+        description: The team type's Showdown ID; null for overall reports.
+        data_type: text
+      - name: species_id
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: species
+        description: The species' Showdown ID, e.g. ninetalesalola.
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: species_name
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: rank
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: usage_share
+        description: Share of teams with this Pokémon, weighted by the baseline.
+        data_type: numeric
+        constraints: [{type: not_null}, {type: check, expression: "usage_share between 0 and 1"}]
+      - name: raw_count
+        description: Teams with this Pokémon, unweighted.
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: raw_share
+        description: Share of teams with this Pokémon, unweighted.
+        data_type: numeric
+        constraints: [{type: not_null}, {type: check, expression: "raw_share between 0 and 1"}]
+      - name: real_count
+        description: Times this Pokémon was brought into battle.
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: real_share
+        description: Share of all Pokémon brought into battle in this scope; Smogon's Real % divided by 600, not 100.
+        data_type: numeric
+        constraints: [{type: not_null}, {type: check, expression: "real_share between 0 and 1"}]
+      - name: viability_user_count
+        description: Players using this Pokémon in chaos's viability ceiling; null when chaos omits it.
+        data_type: integer
+      - name: viability_top_gxe
+        description: Highest GXE among those players.
+        data_type: integer
+      - name: viability_gxe_p99
+        description: 99th percentile GXE among those players.
+        data_type: integer
+      - name: viability_gxe_p95
+        description: 95th percentile GXE among those players.
+        data_type: integer
+      - name: usage_source_file_id
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: chaos_source_file_id
+        description: Null when chaos omits this Pokémon.
+        data_type: bigint
