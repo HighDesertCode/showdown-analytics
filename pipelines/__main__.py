@@ -1,8 +1,11 @@
 """Entry point: `uv run --env-file .env pipelines <command>`."""
 
 import argparse
+from datetime import date
 
-from pipelines import db, showdown
+from pipelines import db, showdown, smogon
+from pipelines.raw.load import load_file
+from pipelines.reference.common import existing_ids
 from pipelines.reference.load import load_all
 
 
@@ -27,17 +30,48 @@ def load_reference() -> None:
         print(f"{table:<16} {count:>5} inserted")
 
 
-COMMANDS = {
-    "check-connection": check_connection,
-    "load-reference": load_reference,
-}
+def load_smogon(month: date, families: list[str]) -> None:
+    with db.connect() as conn:
+        type_ids = existing_ids(conn, "type")
+        if not type_ids:
+            # Without types, only overall reports would be listed and per-type reports silently skipped.
+            raise RuntimeError("reference.type is empty; run `pipelines load-reference` first")
+        team_types = sorted(type_ids, key=type_ids.__getitem__)
+        files = [file for family in families for file in smogon.report_files(family, month, team_types)]
+        width = max(len(family) for family in families)
+        for file in files:
+            counts = load_file(conn, file, type_ids.get(file.team_type) if file.team_type else None)
+            # Commit each file on its own: a later failure keeps earlier files, and a rerun skips them.
+            conn.commit()
+            scope = f"mono{file.team_type}" if file.team_type else "overall"
+            if counts is None:
+                result = "skipped (already loaded)"
+            else:
+                result = "loaded " + "  ".join(f"{count:>6,} {table}" for table, count in counts.items())
+            print(f"{file.family:<{width}} {scope:<14} {file.baseline}  {result}")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="pipelines")
-    parser.add_argument("command", choices=COMMANDS)
+    commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("check-connection", help="check the database connection")
+    commands.add_parser("load-reference", help="load Showdown reference data")
+    load_smogon_parser = commands.add_parser("load-smogon", help="load one month of Smogon reports")
+    load_smogon_parser.add_argument("month", type=smogon.parse_month, help="the report month, e.g. 2026-09")
+    load_smogon_parser.add_argument(
+        "--family",
+        action="append",
+        choices=list(smogon.FAMILIES),
+        help="load only this report family; repeat for several (default: every family)",
+    )
     args = parser.parse_args()
-    COMMANDS[args.command]()
+
+    if args.command == "check-connection":
+        check_connection()
+    elif args.command == "load-reference":
+        load_reference()
+    elif args.command == "load-smogon":
+        load_smogon(args.month, args.family or list(smogon.FAMILIES))
 
 
 if __name__ == "__main__":

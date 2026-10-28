@@ -6,9 +6,10 @@ Showdown's GitHub repository. Files are read into memory and parsed as data, nev
 
 import json
 import re
-import urllib.request
 
 import json5
+
+from pipelines import download
 
 CLIENT_DATA = "https://play.pokemonshowdown.com/data"
 REPO_DATA = "https://raw.githubusercontent.com/smogon/pokemon-showdown/master/data"
@@ -25,13 +26,9 @@ SOURCES = {
     "move_text": f"{REPO_DATA}/text/moves.ts",
 }
 
-USER_AGENT = "showdown-analytics (+https://github.com/HighDesertCode/showdown-analytics)"
-
 
 def fetch(url: str) -> str:
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=30) as response:
-        return response.read().decode("utf-8")
+    return download.fetch(url).decode("utf-8")
 
 
 def parse(text: str) -> dict:

@@ -6,11 +6,11 @@ See `REPORT.md` for research context and data interpretation. Always preserve so
 
 # Infrastructure
 
-All services run on DigitalOcean. Notion is used separately for personal notes. This is the intended architecture; only what `docs/database-architecture.md` lists as deployed actually exists. Stay within the current milestone (M1: database foundation).
+All services run on DigitalOcean. Notion is used separately for personal notes. This is the intended architecture; only what `docs/database-architecture.md` lists as deployed actually exists. Stay within the current milestone (M2: Smogon data ingestion).
 
-- **Database:** Managed PostgreSQL. Project data goes in `showdown-database` via `showdown-analyst`; never use `defaultdb` or infer the database/user from cluster defaults. Schema changes are SQL files run manually by `doadmin`; `showdown-analyst` has no DDL rights.
+- **Database:** Managed PostgreSQL. Project data goes in `showdown-database` via `showdown-analyst`; never use `defaultdb` or infer the database/user from cluster defaults. Schema changes are SQL files run manually by `doadmin`. `showdown-analyst` is the only project role: `SELECT` and `INSERT` on `reference` and `raw`, with no `UPDATE`, `DELETE`, or DDL; `CONNECT` on `defaultdb` is revoked from `PUBLIC`.
 - **Developer access:** Tailscale subnet router on a Droplet in the database VPC, plus trusted sources and TLS with certificate verification.
-- **Planned:** Spaces (raw archives), Python collectors run locally then on App Platform (with scheduling), a read-only FastAPI service, a Streamlit site and a public CLI that both consume only that API, and private research storage that is never reachable from public endpoints.
+- **Planned:** dbt models (`staging`, `api`), Python collectors run locally then on App Platform (with scheduling), a read-only FastAPI service, a Streamlit site and a public CLI that both consume only that API, and private research storage that is never reachable from public endpoints.
 
 **Terraform:** Create services manually, write matching configuration, `terraform import`, and confirm a no-change plan before managing changes through Terraform. Keep state outside Git; never commit state, plans, credentials, or secret variable files.
 
@@ -19,8 +19,9 @@ All services run on DigitalOcean. Notion is used separately for personal notes. 
 # Development
 
 - **Layout:** One top-level directory per product: `pipelines/` (internal data loading; the only code that writes to the database), and later `api/`, `web/`, and `cli/` (the public CLI, which uses only the API). Tests mirror it under `tests/<product>/`.
-- **SQL:** `sql/create/`, `sql/index/`, and `sql/permissions/` hold one file per table or role, run manually as `doadmin` in foreign-key order. No migration tooling yet (see *Applying SQL Changes* in `docs/database-architecture.md`).
+- **SQL:** `sql/create/<schema>/` and `sql/index/<schema>/` hold one file per table (plus `schema.sql`), and `sql/permissions/` one file per role, run manually as `doadmin` in TablePlus: `SQL_FILES` in `tests/pipelines/conftest.py` gives the create and index order, then permissions. Grant files only add privileges, so removing one needs a one-time `REVOKE`; changing a table needs a one-time `ALTER` plus an edit to its `create` file. Verify as `showdown-analyst` and update the docs' table counts. Add migration tooling once tables hold data that can't be reloaded.
 - **Reference data:** Showdown's own data files are the source of truth (not PokeAPI). Loaders insert only new rows, skipping existing `showdown_id`s up front rather than using `ON CONFLICT`, and run in one transaction.
+- **Smogon data:** `load-smogon <YYYY-MM> [--family <family>]` loads chaos, usage, leads, metagame, and matchup chart reports (overall and per type, at 1630 and 1760) into `raw`, committing each file separately. Files already recorded in `raw.source_file` (same URL and SHA-256) are skipped. Parsers are strict and raise `ReportFormatError` on any unexpected shape. Raw files aren't archived; Smogon keeps them online.
 - **Running pipelines:** `uv run --env-file .env pipelines <command>`; `.env` holds libpq `PG*` variables with `PGSSLMODE=verify-full`.
 - **Tooling:** pytest, Ruff (120-character lines; rules `E`, `F`, `I`, `UP`, `B`), and ty (beta, pinned to an exact version). Before committing:
 
@@ -31,8 +32,10 @@ All services run on DigitalOcean. Notion is used separately for personal notes. 
   uv run pytest tests/pipelines                       # runs tests
   ```
 
+  Database tests are skipped unless `TEST_DATABASE_URL` points at a disposable database (CI provides one); locally, run `docker run -d --rm --name sa-test-pg -e POSTGRES_PASSWORD=postgres -p 54329:5432 postgres:18` and set `TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:54329/postgres`.
+
 - **CI:** One workflow per product and check, named `python-<product>-<check>.yml` (`tests`, `lint`, `type-checker`), each triggered only by changes to that product's paths.
-- **Deferred:** dbt is reconsidered in M2 when derived statistics views begin.
+- **dbt (next in M2):** builds `staging` views and `api` models from `raw` and `reference`; `api` models use contracts so column changes fail the build.
 
 # Git Strategy
 
