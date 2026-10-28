@@ -33,6 +33,9 @@ def load_reference() -> None:
 def load_smogon(month: date, families: list[str]) -> None:
     with db.connect() as conn:
         type_ids = existing_ids(conn, "type")
+        if not type_ids:
+            # Without types, only overall reports would be listed and per-type reports silently skipped.
+            raise RuntimeError("reference.type is empty; run `pipelines load-reference` first")
         team_types = sorted(type_ids, key=type_ids.__getitem__)
         files = [file for family in families for file in smogon.report_files(family, month, team_types)]
         width = max(len(family) for family in families)

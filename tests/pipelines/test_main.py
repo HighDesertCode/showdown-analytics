@@ -71,3 +71,11 @@ def test_load_smogon_rejects_unknown_family(monkeypatch):
         cli.main()
 
     assert exit_info.value.code == 2
+
+
+def test_load_smogon_requires_reference_types(monkeypatch):
+    monkeypatch.setattr(cli.db, "connect", FakeConnection)
+    monkeypatch.setattr(cli, "existing_ids", lambda conn, table: {})
+
+    with pytest.raises(RuntimeError, match="load-reference"):
+        cli.load_smogon(date(2026, 9, 1), ["chaos"])
