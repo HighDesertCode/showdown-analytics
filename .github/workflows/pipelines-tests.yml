@@ -1,4 +1,4 @@
-name: Python pipelines tests
+name: Pipelines Tests
 
 on:
   pull_request:
@@ -9,7 +9,7 @@ on:
       - "pyproject.toml"
       - "uv.lock"
       - ".python-version"
-      - ".github/workflows/python-pipelines-tests.yml"
+      - ".github/workflows/pipelines-tests.yml"
 
 permissions:
   contents: read

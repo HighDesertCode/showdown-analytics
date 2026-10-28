@@ -34,7 +34,7 @@ All services run on DigitalOcean. Notion is used separately for personal notes. 
 
   Database tests are skipped unless `TEST_DATABASE_URL` points at a disposable database (CI provides one); locally, run `docker run -d --rm --name sa-test-pg -e POSTGRES_PASSWORD=postgres -p 54329:5432 postgres:18` and set `TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:54329/postgres`.
 
-- **CI:** One workflow per product and check, named `python-<product>-<check>.yml` (`tests`, `lint`, `type-checker`), each triggered only by changes to that product's paths.
+- **CI:** One workflow per product and check, named `<product>-<check>.yml` (`tests`, `lint`, `type-checker`), each triggered only by changes to that product's paths.
 - **dbt (next in M2):** builds `staging` views and `api` models from `raw` and `reference`; `api` models use contracts so column changes fail the build.
 
 # Git Strategy
