@@ -29,8 +29,8 @@ flowchart LR
 | --- | --- | --- |
 | `reference` | Deployed | Pokémon, types, abilities, moves, items, and natures from Showdown |
 | `raw` | Deployed | Smogon's monthly reports as published |
-| `staging` | Planned (M2) | Cleaned report data with names matched to `reference` |
-| `api` | Planned (M2) | The published statistics; the only schema the API reads |
+| `staging` | Deployed | Cleaned report data with names matched to `reference` |
+| `api` | Deployed | The published statistics; the only schema the API reads |
 | `replays` | Planned (M4) | Public battle replays |
 | `research` | Planned (M5) | Private team and battle records, never exposed publicly |
 
@@ -286,6 +286,68 @@ Row counts below are for September 2026, the first month loaded.
 | `matchup_chart_report` | 2 | One chart per baseline |
 | `matchup_chart_cell` | 648 | Weighted wins and win percent for each of the 18 × 18 type pairings; mirror matches show 0% |
 | `matchup_chart_viability` | 36 | Smogon's ViabilityScore per type, a published score rather than a win rate |
+
+## Published Statistics
+
+The `staging` and `api` schemas are built with [dbt](https://www.getdbt.com/) from `raw` and `reference` after each monthly load:
+
+- **`staging`** holds views that clean each raw table once: they keep only the latest version of each file, match Smogon's names to `reference` IDs, and flag placeholders such as empty move slots. Tests check that every name matches and nothing is duplicated.
+- **`api`** holds the published statistics as tables, rebuilt only after every test passes, and the reference data as views. Each model has a contract that fixes its column names, types, and constraints, so a change in Smogon's data fails the build rather than changing what clients see.
+
+Every `api` statistic shares the same conventions:
+
+| Area | Convention |
+| --- | --- |
+| Scope | `format`, `report_month`, `baseline`, and `team_type`: the type's Showdown ID (e.g. `water`), or null for overall reports. Matchup charts are overall only and have no `team_type`. |
+| Identity | Each entity has an ID, its Showdown ID, and its name, e.g. `species_id`, `species` (`ninetalesalola`), and `species_name` (Ninetales-Alola). |
+| Proportions | Shares and rates run from 0 to 1 (Smogon prints percentages). Each column's description states its denominator. |
+| Provenance | Every row has a `source_file_id` (one per report family in `report`) that links to `source_file`. |
+
+The diagram shows how the statistics join to the reference views; every table also links to `source_file`.
+
+```mermaid
+erDiagram
+    species ||--o{ pokemon_usage : ""
+    species ||--o{ pokemon_ability : ""
+    species ||--o{ pokemon_item : ""
+    species ||--o{ pokemon_move : ""
+    species ||--o{ pokemon_spread : ""
+    species ||--o{ pokemon_teammate : "species and teammate"
+    species ||--o{ pokemon_counter : "species and opponent"
+    species ||--o{ pokemon_lead : ""
+    ability ||--o{ pokemon_ability : ""
+    item |o--o{ pokemon_item : ""
+    move ||--o{ pokemon_move : ""
+    nature ||--o{ pokemon_spread : ""
+    type ||--o{ type_matchup : "type and opponent"
+    type ||--o{ type_viability : ""
+```
+
+Row counts below are for September 2026.
+
+| Table | Rows | Contents |
+| --- | ---: | --- |
+| `source_file` | 154 | The Smogon files behind the statistics, with their URLs and retrieval times |
+| `report` | 38 | One row per scope: battle count, average weight per team, average stalliness, and each family's file |
+| `pokemon_usage` | 2,892 | Usage rank and shares of teams (weighted and unweighted), share of Pokémon brought into battle, and Smogon's viability ceiling |
+| `pokemon_ability` | 3,831 | Share of each Pokémon's sets with each ability |
+| `pokemon_item` | 32,630 | Share of sets holding each item, including sets with no item |
+| `pokemon_move` | 62,235 | Share of sets with each move; shares sum to at most 4 (four move slots) |
+| `pokemon_spread` | 97,565 | Share of sets with each nature and EV spread |
+| `pokemon_teammate` | 82,986 | Share of a Pokémon's teams that include each teammate |
+| `pokemon_counter` | 2,710 | Checks and counters (overall only): encounters, the rate of being KOed or forced out, and Smogon's ranking score |
+| `pokemon_lead` | 2,550 | Share of leads, weighted and unweighted |
+| `metagame_tag` | 694 | Share of teams with each tag; tags overlap, so shares sum to over 1 |
+| `type_matchup` | 648 | Weighted wins and win rate for each type pairing; mirror matches have no win rate |
+| `type_viability` | 36 | Smogon's ViabilityScore per type, with its rank |
+
+The views `species`, `type`, `ability`, `item`, `move`, and `nature` publish the reference data with the same naming.
+
+A few values differ from how Smogon prints them:
+
+- **Real usage:** Smogon scales "Real %" so all Pokémon sum to 600%, which lets it exceed 100%. `real_share` divides by 600 instead, giving each Pokémon's share of all Pokémon brought into battle.
+- **Mirror matches:** Smogon prints a type against itself as 0%. `win_rate` is null for these, since no real win rate exists.
+- **Placeholders:** empty move slots and unfilled team slots are left out; sets with no held item are kept, with a null item.
 
 ## Data Conventions
 
