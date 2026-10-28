@@ -499,3 +499,138 @@ models:
         description: The leads file this row comes from.
         data_type: bigint
         constraints: [{type: not_null}]
+
+  - name: metagame_tag
+    description: Share of teams with each metagame tag, per report scope; tags overlap, so shares don't sum to 1.
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "format || '-' || report_month || '-' || baseline || '-' || COALESCE(team_type, 'overall') || '-' || tag"
+    columns:
+      - name: format
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: report_month
+        data_type: date
+        constraints: [{type: not_null}]
+      - name: baseline
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: team_type
+        description: The team type's Showdown ID; null for overall reports.
+        data_type: text
+      - name: tag
+        description: Smogon's tag, e.g. monoice, hail, stall.
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: tag_team_type
+        description: The type's Showdown ID for type tags (e.g. ice for monoice); null for other tags.
+        data_type: text
+      - name: share
+        description: Share of teams with this tag, weighted by the baseline.
+        data_type: numeric
+        constraints: [{type: not_null}, {type: check, expression: "share BETWEEN 0 AND 1"}]
+      - name: source_file_id
+        description: The metagame file this row comes from.
+        data_type: bigint
+        constraints: [{type: not_null}]
+
+  - name: type_matchup
+    description: Weighted wins and win rate for each type against each other type, from overall matchup charts.
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "format || '-' || report_month || '-' || baseline || '-' || type_id || '-' || opponent_type_id"
+    columns:
+      - name: format
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: report_month
+        data_type: date
+        constraints: [{type: not_null}]
+      - name: baseline
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: type_id
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: type
+        description: The team type's Showdown ID, e.g. water.
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: type_name
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: opponent_type_id
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: opponent_type
+        description: The opponent type's Showdown ID, e.g. water.
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: opponent_type_name
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: is_mirror
+        description: True when a type faces itself.
+        data_type: boolean
+        constraints: [{type: not_null}]
+      - name: wins
+        description: Weighted wins for this type in this pairing.
+        data_type: numeric
+        constraints: [{type: not_null}, {type: check, expression: "wins >= 0"}]
+      - name: win_rate
+        description: Wins divided by all wins in this pairing; null for mirror matches.
+        data_type: numeric
+        constraints: [{type: check, expression: "win_rate BETWEEN 0 AND 1"}]
+      - name: source_file_id
+        description: The matchup chart this row comes from.
+        data_type: bigint
+        constraints: [{type: not_null}]
+
+  - name: type_viability
+    description: Smogon's ViabilityScore per type, from overall matchup charts; a published score, not a win rate.
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "format || '-' || report_month || '-' || baseline || '-' || type_id"
+    columns:
+      - name: format
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: report_month
+        data_type: date
+        constraints: [{type: not_null}]
+      - name: baseline
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: type_id
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: type
+        description: The team type's Showdown ID, e.g. water.
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: type_name
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: viability_score
+        data_type: numeric
+        constraints: [{type: not_null}]
+      - name: rank
+        description: 1 for the highest viability score in the chart.
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: source_file_id
+        description: The matchup chart this row comes from.
+        data_type: bigint
+        constraints: [{type: not_null}]
