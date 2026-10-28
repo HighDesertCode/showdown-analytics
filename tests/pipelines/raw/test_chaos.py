@@ -80,7 +80,7 @@ def broken(change) -> dict:
         (broken(lambda r: r["data"]["Swampert"].update({"Natures": {}})), "unexpected \\['Natures'\\]"),
         (broken(lambda r: r["data"]["Swampert"].update({"Viability Ceiling": [571, 88, 83]})), "4 values"),
         (broken(lambda r: r["data"]["Swampert"].update({"Raw count": "4603"})), "expected an integer"),
-        (broken(lambda r: r["data"]["Swampert"]["Items"].update({"leftovers": True})), "expected a number"),
+        (broken(lambda r: r["data"]["Swampert"]["Items"].update({"leftovers": True})), "expected a finite number"),
         (broken(lambda r: r["data"]["Swampert"]["Checks and Counters"]["Ogerpon-Wellspring"].pop("d")), "missing"),
         (broken(lambda r: r["info"].update({"cutoff": 1760})), "info: expected"),
         (broken(lambda r: r["info"].update({"team type": "monowater"})), "info: expected"),
@@ -90,3 +90,11 @@ def broken(change) -> dict:
 def test_parse_rejects_unexpected_shapes(report, message):
     with pytest.raises(ReportFormatError, match=message):
         chaos.parse(encode(report), OVERALL)
+
+
+@pytest.mark.parametrize("weight", ["NaN", "Infinity", "-Infinity", "1e400"])
+def test_parse_rejects_non_finite_weights(weight):
+    text = encode(REPORT).replace(b"848.989", weight.encode())
+
+    with pytest.raises(ReportFormatError, match="expected a finite number"):
+        chaos.parse(text, OVERALL)

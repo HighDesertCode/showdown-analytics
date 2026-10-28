@@ -5,6 +5,7 @@ in Smogon's format stops the load instead of storing partial or misread data.
 """
 
 import json
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -151,6 +152,7 @@ def integer(value: Any, where: str) -> int:
 
 
 def number(value: Any, where: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        raise ReportFormatError(f"{where}: expected a number, got {value!r}")
+    # json.loads accepts NaN and Infinity, and turns out-of-range values like 1e400 into infinity.
+    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
+        raise ReportFormatError(f"{where}: expected a finite number, got {value!r}")
     return float(value)
