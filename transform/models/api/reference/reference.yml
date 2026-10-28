@@ -1,0 +1,169 @@
+models:
+
+  - name: type
+    description: The 18 standard types.
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "type_id"
+    columns:
+      - name: type_id
+        data_type: bigint
+      - name: type
+        description: Showdown ID, e.g. water.
+        data_type: text
+      - name: type_name
+        data_type: text
+
+  - name: species
+    description: Species and battle-relevant forms, with types and base stats.
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "species_id"
+    columns:
+      - name: species_id
+        data_type: bigint
+      - name: species
+        description: Showdown ID, e.g. ninetalesalola.
+        data_type: text
+      - name: species_name
+        data_type: text
+      - name: dex_number
+        data_type: smallint
+      - name: base_species
+        description: Set for alternate forms.
+        data_type: text
+      - name: forme
+        description: e.g. Alola for Ninetales-Alola.
+        data_type: text
+      - name: type_1
+        data_type: text
+      - name: type_2
+        description: Null for single-type species.
+        data_type: text
+      - name: hp
+        data_type: smallint
+      - name: atk
+        data_type: smallint
+      - name: def
+        data_type: smallint
+      - name: spa
+        data_type: smallint
+      - name: spd
+        data_type: smallint
+      - name: spe
+        data_type: smallint
+      - name: nonstandard
+        description: e.g. Past or CAP; null for standard Gen 9 entries.
+        data_type: text
+
+  - name: ability
+    description: Abilities.
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "ability_id"
+    columns:
+      - name: ability_id
+        data_type: bigint
+      - name: ability
+        data_type: text
+      - name: ability_name
+        data_type: text
+      - name: short_description
+        data_type: text
+      - name: nonstandard
+        data_type: text
+
+  - name: item
+    description: Items.
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "item_id"
+    columns:
+      - name: item_id
+        data_type: bigint
+      - name: item
+        data_type: text
+      - name: item_name
+        data_type: text
+      - name: is_berry
+        data_type: boolean
+      - name: short_description
+        data_type: text
+      - name: nonstandard
+        data_type: text
+
+  - name: move
+    description: Moves with type, category, power, accuracy, and target.
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "move_id"
+    columns:
+      - name: move_id
+        data_type: bigint
+      - name: move
+        data_type: text
+      - name: move_name
+        data_type: text
+      - name: type
+        data_type: text
+      - name: category
+        description: Physical, Special, or Status.
+        data_type: text
+      - name: base_power
+        data_type: smallint
+      - name: accuracy
+        description: Null if the move can't miss.
+        data_type: smallint
+      - name: pp
+        data_type: smallint
+      - name: priority
+        data_type: smallint
+      - name: target
+        data_type: text
+      - name: short_description
+        data_type: text
+      - name: nonstandard
+        data_type: text
+
+  - name: nature
+    description: Natures and the stats they raise and lower.
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "nature_id"
+    columns:
+      - name: nature_id
+        data_type: bigint
+      - name: nature
+        data_type: text
+      - name: nature_name
+        data_type: text
+      - name: increased_stat
+        description: Null for neutral natures.
+        data_type: text
+      - name: decreased_stat
+        description: Null for neutral natures.
+        data_type: text

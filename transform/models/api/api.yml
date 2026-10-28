@@ -634,3 +634,40 @@ models:
         description: The matchup chart this row comes from.
         data_type: bigint
         constraints: [{type: not_null}]
+
+  - name: source_file
+    description: The Smogon files behind the api tables, one per URL (the latest version).
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "source_file_id"
+    columns:
+      - name: source_file_id
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: family
+        description: chaos, usage, leads, metagame, or matchup_chart.
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: format
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: report_month
+        data_type: date
+        constraints: [{type: not_null}]
+      - name: baseline
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: team_type
+        description: The team type's Showdown ID; null for overall reports.
+        data_type: text
+      - name: url
+        description: Where the file is published on smogon.com.
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: retrieved_at
+        data_type: timestamp with time zone
+        constraints: [{type: not_null}]

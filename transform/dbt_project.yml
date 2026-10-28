@@ -18,3 +18,6 @@ models:
     api:
       +schema: api
       +materialized: table
+      # Reference data is already clean, so it is published as views rather than copied.
+      reference:
+        +materialized: view
