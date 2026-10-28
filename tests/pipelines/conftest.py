@@ -38,6 +38,8 @@ SQL_FILES = [
     "create/raw/matchup_chart_report.sql",
     "create/raw/matchup_chart_cell.sql",
     "create/raw/matchup_chart_viability.sql",
+    "create/staging/schema.sql",
+    "create/api/schema.sql",
 ]
 PROTECTED_DATABASES = {"showdown-database", "defaultdb"}
 
@@ -55,7 +57,7 @@ def schemas(database_url: str) -> None:
     with psycopg.connect(database_url, autocommit=True) as conn:
         if conn.info.dbname in PROTECTED_DATABASES:
             raise RuntimeError(f"Refusing to rebuild schemas in {conn.info.dbname}")
-        conn.execute("DROP SCHEMA IF EXISTS raw, reference CASCADE")
+        conn.execute("DROP SCHEMA IF EXISTS api, staging, raw, reference CASCADE")
         for name in SQL_FILES:
             conn.execute((SQL_DIR / name).read_bytes())
 
