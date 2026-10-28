@@ -124,7 +124,7 @@ models:
         data_tests:
           - not_null:
               config:
-                where: not is_empty_slot
+                where: NOT is_empty_slot
 
   - name: stg_chaos_spread
     columns:
@@ -142,7 +142,7 @@ models:
         data_tests:
           - not_null:
               config:
-                where: not is_empty_slot
+                where: NOT is_empty_slot
 
   - name: stg_chaos_counter
     data_tests:

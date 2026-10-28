@@ -4,31 +4,31 @@
 --   raw_share:   unweighted share of teams with this Pokémon (raw % / 100)
 --   real_share:  share of all Pokémon brought into battle (real % / 600, since Smogon scales real % to sum to 600)
 -- Chaos omits Pokémon with negligible weight, so their viability columns are null.
-select
+SELECT
     usage.format,
     usage.report_month,
     usage.baseline,
     usage.team_type,
     species.species_id,
-    species.showdown_id as species,
-    species.name as species_name,
+    species.showdown_id AS species,
+    species.name AS species_name,
     usage.rank,
-    trim_scale(usage.usage_percent / 100) as usage_share,
+    TRIM_SCALE(usage.usage_percent / 100) AS usage_share,
     usage.raw_count,
-    trim_scale(usage.raw_percent / 100) as raw_share,
+    TRIM_SCALE(usage.raw_percent / 100) AS raw_share,
     usage.real_count,
-    trim_scale(round(usage.real_percent / 600, 8)) as real_share,
+    TRIM_SCALE(ROUND(usage.real_percent / 600, 8)) AS real_share,
     chaos.viability_user_count,
     chaos.viability_top_gxe,
     chaos.viability_gxe_p99,
     chaos.viability_gxe_p95,
-    usage.source_file_id as usage_source_file_id,
-    chaos.source_file_id as chaos_source_file_id
-from {{ ref('stg_usage_pokemon') }} as usage
-inner join {{ source('reference', 'species') }} as species on species.species_id = usage.species_id
-left join {{ ref('stg_chaos_pokemon') }} as chaos
-    on chaos.format = usage.format
-    and chaos.report_month = usage.report_month
-    and chaos.baseline = usage.baseline
-    and chaos.team_type is not distinct from usage.team_type
-    and chaos.species_id = usage.species_id
+    usage.source_file_id AS usage_source_file_id,
+    chaos.source_file_id AS chaos_source_file_id
+FROM {{ ref('stg_usage_pokemon') }} AS usage
+INNER JOIN {{ source('reference', 'species') }} AS species ON species.species_id = usage.species_id
+LEFT JOIN {{ ref('stg_chaos_pokemon') }} AS chaos
+    ON chaos.format = usage.format
+    AND chaos.report_month = usage.report_month
+    AND chaos.baseline = usage.baseline
+    AND chaos.team_type IS NOT DISTINCT FROM usage.team_type
+    AND chaos.species_id = usage.species_id

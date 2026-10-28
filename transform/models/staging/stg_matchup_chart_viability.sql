@@ -1,5 +1,5 @@
 -- Smogon's published ViabilityScore per type in each current matchup chart, matched to reference.type.
-select
+SELECT
     file.source_file_id,
     file.format,
     file.report_month,
@@ -7,6 +7,6 @@ select
     team_type.type_id,
     viability.type,
     viability.viability_score
-from {{ source('raw', 'matchup_chart_viability') }} as viability
-inner join {{ ref('stg_source_file') }} as file on file.source_file_id = viability.source_file_id
-left join {{ source('reference', 'type') }} as team_type on team_type.showdown_id = viability.type
+FROM {{ source('raw', 'matchup_chart_viability') }} AS viability
+INNER JOIN {{ ref('stg_source_file') }} AS file ON file.source_file_id = viability.source_file_id
+LEFT JOIN {{ source('reference', 'type') }} AS team_type ON team_type.showdown_id = viability.type
