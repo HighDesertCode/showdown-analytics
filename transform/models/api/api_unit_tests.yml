@@ -23,3 +23,50 @@ unit_tests:
       rows:
         - {species: ninetalesalola, usage_share: 0.9879021, raw_share: 0.87312, real_share: 0.17347, viability_user_count: 504, viability_top_gxe: 82, chaos_source_file_id: 2}
         - {species: snom, usage_share: 0.0000012, raw_share: 0.00021, real_share: 0.00001, viability_user_count: null, viability_top_gxe: null, chaos_source_file_id: null}
+
+  - name: pokemon_item_divides_by_ability_weight_total
+    description: >
+      Each item's share is its weight divided by the Pokémon's total ability weight, which matches Smogon's
+      moveset reports (water Swampert's Leftovers: 848.989 / 1429.394 = 59.395%). Sets with no held item keep
+      their share with has_item false and a null item.
+    model: pokemon_item
+    given:
+      - input: ref('stg_chaos_item')
+        rows:
+          - {chaos_pokemon_id: 1, item_id: 100, has_item: true, weight: 848.989}
+          - {chaos_pokemon_id: 1, item_id: null, has_item: false, weight: 580.405}
+      - input: ref('stg_chaos_pokemon')
+        rows:
+          - {chaos_pokemon_id: 1, source_file_id: 5, format: gen9monotype, report_month: 2026-09-01, baseline: 1630, team_type: water, species_id: 10, ability_weight_total: 1429.394}
+      - input: source('reference', 'species')
+        rows:
+          - {species_id: 10, showdown_id: swampert, name: Swampert}
+      - input: source('reference', 'item')
+        rows:
+          - {item_id: 100, showdown_id: leftovers, name: Leftovers}
+    expect:
+      rows:
+        - {species: swampert, has_item: true, item: leftovers, share: 0.5939503034, source_file_id: 5}
+        - {species: swampert, has_item: false, item: null, share: 0.4060496966, source_file_id: 5}
+
+  - name: pokemon_move_leaves_out_empty_slots
+    description: >
+      Unused move slots are dropped: Smogon counts each one, so their total isn't a share of sets.
+    model: pokemon_move
+    given:
+      - input: ref('stg_chaos_move')
+        rows:
+          - {chaos_pokemon_id: 1, move_id: 200, is_empty_slot: false, weight: 1413.68}
+          - {chaos_pokemon_id: 1, move_id: null, is_empty_slot: true, weight: 30.5}
+      - input: ref('stg_chaos_pokemon')
+        rows:
+          - {chaos_pokemon_id: 1, source_file_id: 5, format: gen9monotype, report_month: 2026-09-01, baseline: 1630, team_type: water, species_id: 10, ability_weight_total: 1429.394}
+      - input: source('reference', 'species')
+        rows:
+          - {species_id: 10, showdown_id: swampert, name: Swampert}
+      - input: source('reference', 'move')
+        rows:
+          - {move_id: 200, showdown_id: earthquake, name: Earthquake}
+    expect:
+      rows:
+        - {species: swampert, move: earthquake, share: 0.98900653}
