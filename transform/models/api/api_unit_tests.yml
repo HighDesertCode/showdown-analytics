@@ -5,24 +5,29 @@ unit_tests:
   - name: pokemon_usage_converts_percentages_to_shares
     description: >
       Usage and raw percentages divide by 100; real percentage divides by 600, because Smogon scales it to sum
-      to 600%. A Pokémon chaos omits keeps its usage row with null viability columns.
+      to 600%. A Pokémon chaos omits keeps its usage row with null viability columns, and one no rated player
+      used (Smogon prints its GXE values as 0) gets null GXE columns.
     model: pokemon_usage
     given:
       - input: ref('stg_usage_pokemon')
         rows:
           - {source_file_id: 1, format: gen9monotype, report_month: 2026-09-01, baseline: 1630, team_type: ice, species_id: 10, rank: 1, usage_percent: 98.79021, raw_percent: 87.312, real_percent: 104.082}
           - {source_file_id: 1, format: gen9monotype, report_month: 2026-09-01, baseline: 1630, team_type: ice, species_id: 20, rank: 30, usage_percent: 0.00012, raw_percent: 0.021, real_percent: 0.006}
+          - {source_file_id: 1, format: gen9monotype, report_month: 2026-09-01, baseline: 1630, team_type: ice, species_id: 30, rank: 25, usage_percent: 0.01500, raw_percent: 0.130, real_percent: 0.090}
       - input: source('reference', 'species')
         rows:
           - {species_id: 10, showdown_id: ninetalesalola, name: Ninetales-Alola}
           - {species_id: 20, showdown_id: snom, name: Snom}
+          - {species_id: 30, showdown_id: cetitan, name: Cetitan}
       - input: ref('stg_chaos_pokemon')
         rows:
           - {source_file_id: 2, format: gen9monotype, report_month: 2026-09-01, baseline: 1630, team_type: ice, species_id: 10, viability_user_count: 504, viability_top_gxe: 82}
+          - {source_file_id: 2, format: gen9monotype, report_month: 2026-09-01, baseline: 1630, team_type: ice, species_id: 30, viability_user_count: 0, viability_top_gxe: 0}
     expect:
       rows:
         - {species: ninetalesalola, usage_share: 0.9879021, raw_share: 0.87312, real_share: 0.17347, viability_user_count: 504, viability_top_gxe: 82, chaos_source_file_id: 2}
         - {species: snom, usage_share: 0.0000012, raw_share: 0.00021, real_share: 0.00001, viability_user_count: null, viability_top_gxe: null, chaos_source_file_id: null}
+        - {species: cetitan, usage_share: 0.00015, raw_share: 0.0013, real_share: 0.00015, viability_user_count: 0, viability_top_gxe: null, chaos_source_file_id: 2}
 
   - name: pokemon_item_divides_by_ability_weight_total
     description: >

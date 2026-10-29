@@ -110,13 +110,13 @@ models:
           Pokémon under 0.01% weighted usage.
         data_type: integer
       - name: viability_top_gxe
-        description: Highest GXE among those players.
+        description: Highest GXE among those players; null when there are none.
         data_type: integer
       - name: viability_gxe_p99
-        description: 99th percentile GXE among those players.
+        description: 99th percentile GXE among those players; null when there are none.
         data_type: integer
       - name: viability_gxe_p95
-        description: 95th percentile GXE among those players.
+        description: 95th percentile GXE among those players; null when there are none.
         data_type: integer
       - name: usage_source_file_id
         data_type: bigint
