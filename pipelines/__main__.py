@@ -5,6 +5,7 @@ import sys
 from datetime import date
 
 from pipelines import db, download, showdown, smogon
+from pipelines.raw import ingestion_run
 from pipelines.raw.load import load_file
 from pipelines.reference.common import existing_ids
 from pipelines.reference.load import load_all
@@ -41,22 +42,37 @@ def load_smogon(month: date, families: list[str]) -> None:
         files = [file for family in families for file in smogon.report_files(family, month, team_types)]
         width = max(len(family) for family in families)
         failed: list[tuple[smogon.ReportFile, Exception]] = []
-        for file in files:
-            scope = f"mono{file.team_type}" if file.team_type else "overall"
-            try:
-                counts = load_file(conn, file, type_ids.get(file.team_type) if file.team_type else None)
-            except download.NETWORK_ERRORS as error:
-                # The download comes before any insert, so there is nothing to roll back; a rerun loads the file.
-                failed.append((file, error))
-                print(f"{file.family:<{width}} {scope:<14} {file.baseline}  failed ({error})")
-                continue
-            # Commit each file on its own: a later failure keeps earlier files, and a rerun skips them.
+        run_id = ingestion_run.start(conn, month, families)
+        conn.commit()
+        try:
+            for file in files:
+                scope = f"mono{file.team_type}" if file.team_type else "overall"
+                try:
+                    counts = load_file(conn, file, type_ids.get(file.team_type) if file.team_type else None)
+                except download.NETWORK_ERRORS as error:
+                    # The download comes before any insert, so there is nothing to roll back; a rerun loads the file.
+                    failed.append((file, error))
+                    ingestion_run.record_file(conn, run_id, "failed")
+                    conn.commit()
+                    print(f"{file.family:<{width}} {scope:<14} {file.baseline}  failed ({error})")
+                    continue
+                # Commit each file on its own: a later failure keeps earlier files, and a rerun skips them. The run's
+                # count commits with the file's rows, so its progress is exact even if the run is killed.
+                ingestion_run.record_file(conn, run_id, "skipped" if counts is None else "loaded")
+                conn.commit()
+                if counts is None:
+                    result = "skipped (already loaded)"
+                else:
+                    result = "loaded " + "  ".join(f"{count:>6,} {table}" for table, count in counts.items())
+                print(f"{file.family:<{width}} {scope:<14} {file.baseline}  {result}")
+        except Exception as error:
+            # Discard the failed file's partial work, then record why the run stopped.
+            conn.rollback()
+            ingestion_run.finish(conn, run_id, "failed", f"{type(error).__name__}: {error}")
             conn.commit()
-            if counts is None:
-                result = "skipped (already loaded)"
-            else:
-                result = "loaded " + "  ".join(f"{count:>6,} {table}" for table, count in counts.items())
-            print(f"{file.family:<{width}} {scope:<14} {file.baseline}  {result}")
+            raise
+        ingestion_run.finish(conn, run_id, "partial" if failed else "succeeded")
+        conn.commit()
     if failed:
         print(f"\n{len(failed)} of {len(files)} files failed to download; rerun to load them:", file=sys.stderr)
         for file, error in failed:

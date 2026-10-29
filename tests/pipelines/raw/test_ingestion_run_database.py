@@ -1,7 +1,11 @@
 """Checks raw.ingestion_run's constraints and showdown-analyst's grants on it (see tests/pipelines/conftest.py)."""
 
+from datetime import date
+
 import psycopg
 import pytest
+
+from pipelines.raw import ingestion_run
 
 START = "INSERT INTO raw.ingestion_run (report_month, families, started_at, status) VALUES (%s, %s, %s, %s)"
 
@@ -57,3 +61,25 @@ def test_status_matches_finished_at_and_error(conn, status, finished_at, error, 
             " VALUES ('2026-09-01', '{chaos}', '2026-10-01T12:00Z', %s, %s, %s)",
             (finished_at, status, error),
         )
+
+
+def test_a_run_records_its_progress_and_result(conn):
+    run_id = ingestion_run.start(conn, date(2026, 9, 1), ["chaos", "usage"])
+    for outcome in ["loaded", "loaded", "skipped", "failed"]:
+        ingestion_run.record_file(conn, run_id, outcome)
+    ingestion_run.finish(conn, run_id, "partial")
+
+    assert conn.execute(
+        "SELECT report_month, families, status, files_loaded, files_skipped, files_failed, error,"
+        " finished_at >= started_at FROM raw.ingestion_run WHERE ingestion_run_id = %s",
+        (run_id,),
+    ).fetchone() == (date(2026, 9, 1), ["chaos", "usage"], "partial", 2, 1, 1, None, True)
+
+
+def test_a_failed_run_records_its_error(conn):
+    run_id = ingestion_run.start(conn, date(2026, 9, 1), ["chaos"])
+    ingestion_run.finish(conn, run_id, "failed", "ReportFormatError: unexpected header")
+
+    assert conn.execute(
+        "SELECT status, error FROM raw.ingestion_run WHERE ingestion_run_id = %s", (run_id,)
+    ).fetchone() == ("failed", "ReportFormatError: unexpected header")
