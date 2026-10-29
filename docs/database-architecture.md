@@ -149,7 +149,7 @@ Smogon publishes usage statistics each month as static files. Each file covers o
 | Metagame | Share of teams by type, play style, weather, and strategy; average stalliness |
 | Matchup chart | Type-versus-type wins and win rates, and Smogon's type viability scores (overall only) |
 
-The `raw` schema stores these reports as published, keeping Smogon's labels and printed precision. Each file is recorded once in `source_file`, and every other row traces back to it. If Smogon republishes a corrected file, it is stored as a new `source_file`.
+The `raw` schema stores these reports as published, keeping Smogon's labels and printed precision. Each file is recorded once in `source_file`, and every other row traces back to it. If Smogon republishes a file with different content, it is stored as a new `source_file`, even when it reverts to an earlier version, and `staging` uses the latest one.
 
 ```mermaid
 erDiagram

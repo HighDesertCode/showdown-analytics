@@ -1,13 +1,17 @@
 """Runs source_file against real tables built from sql/ (see tests/pipelines/conftest.py)."""
 
 from dataclasses import replace
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
+
+import psycopg
+import pytest
 
 from pipelines import smogon
 from pipelines.raw import source_file
 
 WATER = smogon.report_files("chaos", date(2026, 9, 1), ["water"])[1]
 RETRIEVED = source_file.RetrievedFile(WATER, b'{"info": {}}', datetime(2026, 10, 27, tzinfo=UTC))
+REPUBLISHED = b'{"info": {"republished": true}}'
 
 
 def test_insert_records_the_file(conn):
@@ -40,4 +44,26 @@ def test_is_loaded_matches_url_and_content(conn):
     source_file.insert(conn, RETRIEVED, None)
 
     assert source_file.is_loaded(conn, RETRIEVED)
-    assert not source_file.is_loaded(conn, replace(RETRIEVED, content=b'{"info": {"republished": true}}'))
+    assert not source_file.is_loaded(conn, replace(RETRIEVED, content=REPUBLISHED))
+
+
+def test_is_loaded_compares_only_the_latest_version(conn):
+    source_file.insert(conn, RETRIEVED, None)
+    republished = replace(RETRIEVED, content=REPUBLISHED, retrieved_at=RETRIEVED.retrieved_at + timedelta(days=1))
+    source_file.insert(conn, republished, None)
+    reverted = replace(RETRIEVED, retrieved_at=RETRIEVED.retrieved_at + timedelta(days=2))
+
+    # The original content matches an older version but not the latest one, so it is loaded again.
+    assert not source_file.is_loaded(conn, reverted)
+    assert source_file.is_loaded(conn, republished)
+
+    source_file.insert(conn, reverted, None)
+
+    assert source_file.is_loaded(conn, reverted)
+
+
+def test_insert_rejects_a_second_version_retrieved_at_the_same_time(conn):
+    source_file.insert(conn, RETRIEVED, None)
+
+    with pytest.raises(psycopg.errors.UniqueViolation, match="source_file_retrieval_unique"):
+        source_file.insert(conn, replace(RETRIEVED, content=REPUBLISHED), None)
