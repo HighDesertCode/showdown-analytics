@@ -1,3 +1,4 @@
+import http.client
 import urllib.error
 from email.message import Message
 
@@ -17,6 +18,13 @@ class FakeResponse:
 
     def read(self):
         return b'{"ok": true}'
+
+
+class DroppedResponse(FakeResponse):
+    """A response whose connection drops partway through the body."""
+
+    def read(self):
+        raise http.client.IncompleteRead(b'{"ok"')
 
 
 def http_error(code: int) -> urllib.error.HTTPError:
@@ -57,6 +65,14 @@ def test_fetch_returns_bytes_and_sends_user_agent(monkeypatch, waits):
 
 def test_fetch_retries_a_server_error(monkeypatch, waits):
     requests = respond_with(monkeypatch, http_error(503), FakeResponse())
+
+    assert download.fetch(URL) == b'{"ok": true}'
+    assert len(requests) == 2
+    assert waits == [5]
+
+
+def test_fetch_retries_a_dropped_download(monkeypatch, waits):
+    requests = respond_with(monkeypatch, DroppedResponse(), FakeResponse())
 
     assert download.fetch(URL) == b'{"ok": true}'
     assert len(requests) == 2
