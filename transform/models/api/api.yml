@@ -29,7 +29,9 @@ models:
         description: Battles in the whole format that month; per-type reports repeat the overall total.
         data_type: integer
       - name: avg_team_weight
-        description: Average weight per team; small values mean few teams count toward this baseline.
+        description: >
+          Total team weight at this baseline divided by all teams in the format. Per-type reports also divide by
+          all teams, like battle_count, so their values add up across types rather than describing that type's players.
         data_type: numeric
       - name: stalliness_mean
         description: Average stalliness; negative means more offensive teams, positive more defensive.
@@ -81,7 +83,9 @@ models:
         data_type: integer
         constraints: [{type: not_null}]
       - name: usage_share
-        description: Share of teams with this Pokémon, weighted by the baseline.
+        description: >
+          Share of teams with this Pokémon, weighted by the baseline; 0 when only players with no weight at this
+          baseline used it.
         data_type: numeric
         constraints: [{type: not_null}, {type: check, expression: "usage_share BETWEEN 0 AND 1"}]
       - name: raw_count
@@ -101,16 +105,18 @@ models:
         data_type: numeric
         constraints: [{type: not_null}, {type: check, expression: "real_share BETWEEN 0 AND 1"}]
       - name: viability_user_count
-        description: Players using this Pokémon in chaos's viability ceiling; null when chaos omits it.
+        description: >
+          Players using this Pokémon in chaos's viability ceiling; null when chaos omits it, as both baselines do for
+          Pokémon under 0.01% weighted usage.
         data_type: integer
       - name: viability_top_gxe
-        description: Highest GXE among those players.
+        description: Highest GXE among those players; null when there are none.
         data_type: integer
       - name: viability_gxe_p99
-        description: 99th percentile GXE among those players.
+        description: 99th percentile GXE among those players; null when there are none.
         data_type: integer
       - name: viability_gxe_p95
-        description: 95th percentile GXE among those players.
+        description: 95th percentile GXE among those players; null when there are none.
         data_type: integer
       - name: usage_source_file_id
         data_type: bigint
@@ -586,7 +592,9 @@ models:
         data_type: numeric
         constraints: [{type: not_null}, {type: check, expression: "wins >= 0"}]
       - name: win_rate
-        description: Wins divided by all wins in this pairing; null for mirror matches.
+        description: >
+          Smogon's printed win percentage divided by 100: wins over all wins in this pairing, where Smogon divides by
+          at least 1, so a rare pairing's two directions can sum below 1. Null for mirror matches.
         data_type: numeric
         constraints: [{type: check, expression: "win_rate BETWEEN 0 AND 1"}]
       - name: source_file_id
@@ -668,6 +676,15 @@ models:
         description: Where the file is published on smogon.com.
         data_type: text
         constraints: [{type: not_null}]
+      - name: content_sha256
+        description: >
+          SHA-256 of the file as downloaded, in lowercase hex; identifies which version of a republished file this is.
+        data_type: text
+        constraints: [{type: not_null}, {type: check, expression: "content_sha256 ~ '^[0-9a-f]{64}$'"}]
+      - name: byte_size
+        description: The file's size in bytes as downloaded.
+        data_type: integer
+        constraints: [{type: not_null}, {type: check, expression: "byte_size > 0"}]
       - name: retrieved_at
         data_type: timestamp with time zone
         constraints: [{type: not_null}]

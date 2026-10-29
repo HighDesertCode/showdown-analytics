@@ -2,7 +2,12 @@ import pytest
 
 from pipelines import db
 
-SETTINGS = {"PGHOST": "db.example.com", "PGDATABASE": "showdown-database", "PGUSER": "showdown-analyst"}
+SETTINGS = {
+    "PGHOST": "db.example.com",
+    "PGDATABASE": "showdown-database",
+    "PGUSER": "showdown-analyst",
+    "PGSSLMODE": "verify-full",
+}
 
 
 @pytest.fixture
@@ -32,3 +37,23 @@ def test_connect_refuses_defaultdb(settings, monkeypatch):
 
     with pytest.raises(RuntimeError, match="defaultdb"):
         db.connect()
+
+
+@pytest.mark.parametrize("sslmode", [None, "disable", "prefer", "require", "verify-ca"])
+def test_connect_requires_verify_full_for_remote_host(settings, monkeypatch, sslmode):
+    if sslmode is None:
+        monkeypatch.delenv("PGSSLMODE")
+    else:
+        monkeypatch.setenv("PGSSLMODE", sslmode)
+
+    with pytest.raises(RuntimeError, match="verify-full"):
+        db.connect()
+
+
+@pytest.mark.parametrize("host", db.LOCAL_HOSTS)
+def test_connect_allows_local_host_without_verify_full(settings, monkeypatch, host):
+    monkeypatch.setenv("PGHOST", host)
+    monkeypatch.setenv("PGSSLMODE", "disable")
+    monkeypatch.setattr(db.psycopg, "connect", lambda *args, **kwargs: "conn")
+
+    assert db.connect() == "conn"

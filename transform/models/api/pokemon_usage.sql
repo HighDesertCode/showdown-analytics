@@ -3,7 +3,8 @@
 --   usage_share: weighted share of teams with this Pokémon (usage % / 100)
 --   raw_share:   unweighted share of teams with this Pokémon (raw % / 100)
 --   real_share:  share of all Pokémon brought into battle (real % / 600, since Smogon scales real % to sum to 600)
--- Chaos omits Pokémon with negligible weight, so their viability columns are null.
+-- Chaos omits Pokémon with negligible weight, so their viability columns are null. When no rated player used a
+-- Pokémon, chaos prints its GXE values as 0 placeholders, which become null too.
 SELECT
     usage.format,
     usage.report_month,
@@ -17,11 +18,11 @@ SELECT
     usage.raw_count,
     TRIM_SCALE(usage.raw_percent / 100) AS raw_share,
     usage.real_count,
-    TRIM_SCALE(ROUND(usage.real_percent / 600, 8)) AS real_share,
+    TRIM_SCALE(ROUND(usage.real_percent / 600, 10)) AS real_share,
     chaos.viability_user_count,
-    chaos.viability_top_gxe,
-    chaos.viability_gxe_p99,
-    chaos.viability_gxe_p95,
+    CASE WHEN chaos.viability_user_count > 0 THEN chaos.viability_top_gxe END AS viability_top_gxe,
+    CASE WHEN chaos.viability_user_count > 0 THEN chaos.viability_gxe_p99 END AS viability_gxe_p99,
+    CASE WHEN chaos.viability_user_count > 0 THEN chaos.viability_gxe_p95 END AS viability_gxe_p95,
     usage.source_file_id AS usage_source_file_id,
     chaos.source_file_id AS chaos_source_file_id
 FROM {{ ref('stg_usage_pokemon') }} AS usage

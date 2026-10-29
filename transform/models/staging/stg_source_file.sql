@@ -15,6 +15,8 @@ SELECT
     file.baseline,
     team_type.showdown_id AS team_type,
     file.url,
+    file.content_sha256,
+    file.byte_size,
     file.retrieved_at
 FROM {{ source('raw', 'source_file') }} AS file
 INNER JOIN ranked ON ranked.source_file_id = file.source_file_id AND ranked.version_rank = 1

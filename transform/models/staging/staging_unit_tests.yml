@@ -19,3 +19,89 @@ unit_tests:
       rows:
         - {source_file_id: 2, team_type: null}
         - {source_file_id: 3, team_type: water}
+
+  - name: stg_chaos_pokemon_totals_ability_weights
+    description: >
+      ability_weight_total adds up only a Pokémon's ability weights (water Swampert: Torrent 1209.081 + Damp
+      220.313 = 1429.394), not its items or other options. Names match species by Showdown ID, which drops
+      spaces, hyphens, and apostrophes ("Oricorio-Pa'u" becomes oricoriopau).
+    model: stg_chaos_pokemon
+    given:
+      - input: source('raw', 'chaos_pokemon')
+        rows:
+          - {chaos_pokemon_id: 1, source_file_id: 5, pokemon: Swampert}
+          - {chaos_pokemon_id: 2, source_file_id: 5, pokemon: "Oricorio-Pa'u"}
+          - {chaos_pokemon_id: 3, source_file_id: 5, pokemon: Iron Valiant}
+      - input: source('raw', 'chaos_option')
+        rows:
+          - {chaos_pokemon_id: 1, category: abilities, label: torrent, weight: 1209.0809208735927}
+          - {chaos_pokemon_id: 1, category: abilities, label: damp, weight: 220.3128437707143}
+          - {chaos_pokemon_id: 1, category: items, label: leftovers, weight: 848.989}
+          - {chaos_pokemon_id: 2, category: abilities, label: dancer, weight: 12.5}
+          - {chaos_pokemon_id: 3, category: abilities, label: quarkdrive, weight: 640.25}
+      - input: ref('stg_source_file')
+        rows:
+          - {source_file_id: 5, format: gen9monotype, report_month: 2026-09-01, baseline: 1630, team_type: water}
+      - input: source('raw', 'chaos_report')
+        rows:
+          - {source_file_id: 5, battle_count: 63572}
+      - input: source('reference', 'species')
+        rows:
+          - {species_id: 10, showdown_id: swampert}
+          - {species_id: 20, showdown_id: oricoriopau}
+          - {species_id: 30, showdown_id: ironvaliant}
+    expect:
+      rows:
+        - {chaos_pokemon_id: 1, species_id: 10, ability_weight_total: 1429.393764644307}
+        - {chaos_pokemon_id: 2, species_id: 20, ability_weight_total: 12.5}
+        - {chaos_pokemon_id: 3, species_id: 30, ability_weight_total: 640.25}
+
+  - name: stg_chaos_spread_splits_nature_and_evs
+    description: >
+      Each spread label splits into its nature, matched to reference.nature, and six EVs in HP/Atk/Def/SpA/SpD/Spe
+      order (water Swampert's "Adamant:236/76/176/0/8/12" has six different values, so any swapped column fails).
+      Only spread options are kept, and the original label stays.
+    model: stg_chaos_spread
+    given:
+      - input: source('raw', 'chaos_option')
+        rows:
+          - {chaos_pokemon_id: 1, category: spreads, label: "Careful:248/0/0/0/252/8", weight: 297.641840552464}
+          - {chaos_pokemon_id: 1, category: spreads, label: "Adamant:236/76/176/0/8/12", weight: 0.7124150650686821}
+          - {chaos_pokemon_id: 1, category: abilities, label: torrent, weight: 1209.0809208735927}
+      - input: ref('stg_chaos_pokemon')
+        rows:
+          - {chaos_pokemon_id: 1}
+      - input: source('reference', 'nature')
+        rows:
+          - {nature_id: 4, showdown_id: adamant}
+          - {nature_id: 22, showdown_id: careful}
+    expect:
+      rows:
+        - {nature_id: 22, label: "Careful:248/0/0/0/252/8", hp_evs: 248, atk_evs: 0, def_evs: 0, spa_evs: 0, spd_evs: 252, spe_evs: 8, weight: 297.641840552464}
+        - {nature_id: 4, label: "Adamant:236/76/176/0/8/12", hp_evs: 236, atk_evs: 76, def_evs: 176, spa_evs: 0, spd_evs: 8, spe_evs: 12, weight: 0.7124150650686821}
+
+  - name: stg_metagame_tag_matches_type_tags
+    description: >
+      A tag of "mono" plus a type's Showdown ID gets that type in tag_team_type (water's "monowater"). Other
+      tags keep a null tag_team_type, including "monotype", which every team has but names no type.
+    model: stg_metagame_tag
+    given:
+      - input: source('raw', 'metagame_tag')
+        rows:
+          - {source_file_id: 7, tag: monowater, percent: 100.00000}
+          - {source_file_id: 7, tag: monotype, percent: 100.00000}
+          - {source_file_id: 7, tag: stall, percent: 69.96818}
+          - {source_file_id: 7, tag: rain, percent: 28.11969}
+      - input: ref('stg_source_file')
+        rows:
+          - {source_file_id: 7, format: gen9monotype, report_month: 2026-09-01, baseline: 1630, team_type: water}
+      - input: source('reference', 'type')
+        rows:
+          - {type_id: 6, showdown_id: fire}
+          - {type_id: 11, showdown_id: water}
+    expect:
+      rows:
+        - {team_type: water, tag: monowater, tag_team_type: water, percent: 100.00000}
+        - {team_type: water, tag: monotype, tag_team_type: null, percent: 100.00000}
+        - {team_type: water, tag: stall, tag_team_type: null, percent: 69.96818}
+        - {team_type: water, tag: rain, tag_team_type: null, percent: 28.11969}

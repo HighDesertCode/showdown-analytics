@@ -8,5 +8,7 @@ SELECT
     file.baseline,
     file.team_type,
     file.url,
+    file.content_sha256,
+    file.byte_size,
     file.retrieved_at
 FROM {{ ref('stg_source_file') }} AS file

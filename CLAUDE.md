@@ -8,7 +8,7 @@ See `REPORT.md` for research context and data interpretation. Always preserve so
 
 All services run on DigitalOcean. Notion is used separately for personal notes. This is the intended architecture; only what `docs/database-architecture.md` lists as deployed actually exists. Stay within the current milestone (M2: Smogon data ingestion).
 
-- **Database:** Managed PostgreSQL. Project data goes in `showdown-database` via `showdown-analyst`; never use `defaultdb` or infer the database/user from cluster defaults. Schema changes are SQL files run manually by `doadmin`. Two project roles: `showdown-analyst` (pipelines) has `SELECT` and `INSERT` on `reference` and `raw`, with no `UPDATE`, `DELETE`, or DDL; `showdown-transform` (dbt) reads `reference` and `raw` and creates and owns everything in `staging` and `api`. `CONNECT` on `defaultdb` is revoked from `PUBLIC`.
+- **Database:** Managed PostgreSQL. Project data goes in `showdown-database` via `showdown-analyst`; never use `defaultdb` or infer the database/user from cluster defaults. Schema changes are SQL files run manually by `doadmin`. Two project roles: `showdown-analyst` (pipelines) has `SELECT` and `INSERT` on `reference` and `raw`, with no `UPDATE`, `DELETE`, or DDL; `showdown-transform` (dbt) reads `reference` and `raw` and creates and owns everything in `staging` and `api`. dbt recreates `api` tables on every build, which drops one-off grants, so other roles get access to them through `ALTER DEFAULT PRIVILEGES FOR ROLE "showdown-transform"` in their permission file (`doadmin` is a member of that role). `CONNECT` on `defaultdb` is revoked from `PUBLIC`.
 - **Developer access:** Tailscale subnet router on a Droplet in the database VPC, plus trusted sources and TLS with certificate verification.
 - **Planned:** Python collectors run locally then on App Platform (with scheduling), a read-only FastAPI service, a Streamlit site and a public CLI that both consume only that API, and private research storage that is never reachable from public endpoints.
 
@@ -35,7 +35,12 @@ All services run on DigitalOcean. Notion is used separately for personal notes. 
   Database tests are skipped unless `TEST_DATABASE_URL` points at a disposable database (CI provides one); locally, run `docker run -d --rm --name sa-test-pg -e POSTGRES_PASSWORD=postgres -p 54329:5432 postgres:18` and set `TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:54329/postgres`.
 
 - **CI:** One workflow per product and check, named `<product>-<check>.yml` (`tests`, `lint`, `type-checker`), each triggered only by changes to that product's paths. `transform-tests.yml` sets up an empty database with `tests/transform/setup_database.py` and runs `dbt build`.
-- **dbt:** `staging` holds views that clean each raw table once; `api` holds statistics as tables (with enforced contracts) and reference data as views (`models/api/reference/`). Shares are 0-to-1 proportions with their denominators documented. Unit tests live in `*_unit_tests.yml` next to their models. After a monthly load, run `uv run --group dbt --env-file .env dbt build --project-dir transform --profiles-dir transform` (`.env` also holds `DBT_USER` and `DBT_PASSWORD`); add `--select staging` or `--select api` to build one layer.
+- **dbt:** `staging` holds views that clean each raw table once; `api` holds statistics as tables (with enforced contracts) and reference data as views (`models/api/reference/`). Shares are 0-to-1 proportions with their denominators documented. Unit tests live in `*_unit_tests.yml` next to their models. After a monthly load, build `staging` and then `api`, so a failed staging test (including the check that every month has all 77 files) leaves every `api` table untouched (`.env` also holds `DBT_USER` and `DBT_PASSWORD`):
+
+  ```bash
+  uv run --group dbt --env-file .env dbt build --project-dir transform --profiles-dir transform --select staging \
+    && uv run --group dbt --env-file .env dbt build --project-dir transform --profiles-dir transform --select api
+  ```
 
 # Git Strategy
 

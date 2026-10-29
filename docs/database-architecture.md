@@ -268,16 +268,16 @@ erDiagram
     }
 ```
 
-Row counts below are for September 2026, the first month loaded.
+Row counts below are for September 2026.
 
 | Table | Rows | Contents |
 | --- | ---: | --- |
 | `source_file` | 154 | 38 files each for chaos, usage, leads, and metagame (overall and 18 types at two baselines); 2 matchup charts |
 | `chaos_report` | 38 | Each chaos file's header: format, baseline, team type, and battle count |
-| `chaos_pokemon` | 1,862 | Usage and viability ceiling per Pokémon; 1760 files omit Pokémon with negligible weight |
+| `chaos_pokemon` | 1,862 | Usage and viability ceiling per Pokémon; both baselines omit Pokémon under 0.01% weighted usage |
 | `chaos_option` | 284,261 | Weighted abilities, items, moves, spreads, teammates, Tera types, and happiness |
 | `chaos_counter` | 2,710 | Checks and counters; only overall reports include them |
-| `usage_report` | 38 | Battle count and average weight per team, which shows how much data a baseline rests on |
+| `usage_report` | 38 | Battle count and average weight per team; per-type reports divide by all teams in the format |
 | `usage_pokemon` | 2,892 | Rank and usage per Pokémon; real percent is scaled to sum to 600% (six team slots), so it can exceed 100% |
 | `leads_report` | 38 | Total leads (two per battle), counted across all teams even in per-type reports |
 | `leads_pokemon` | 2,550 | Lead rank and usage per Pokémon |
@@ -291,8 +291,10 @@ Row counts below are for September 2026, the first month loaded.
 
 The `staging` and `api` schemas are built with [dbt](https://www.getdbt.com/) from `raw` and `reference` after each monthly load:
 
-- **`staging`** holds views that clean each raw table once: they keep only the latest version of each file, match Smogon's names to `reference` IDs, and flag placeholders such as empty move slots. Tests check that every name matches and nothing is duplicated.
-- **`api`** holds the published statistics as tables, rebuilt only after every test passes, and the reference data as views. Each model has a contract that fixes its column names, types, and constraints, so a change in Smogon's data fails the build rather than changing what clients see.
+- **`staging`** holds views that clean each raw table once: they keep only the latest version of each file, match Smogon's names to `reference` IDs, and flag placeholders such as empty move slots. Tests check that every name matches, nothing is duplicated, and every loaded month and baseline has all 77 files.
+- **`api`** holds the published statistics as tables and the reference data as views. Each model has a contract that fixes its column names, types, and constraints, so a change in Smogon's data fails the build rather than changing what clients see.
+
+`staging` is built and tested first, and `api` is rebuilt only if every staging test passes. Each `api` table's own tests run after that table is rebuilt, so when one fails, the table already holds the new data until the problem is fixed and the build is rerun.
 
 Every `api` statistic shares the same conventions:
 
@@ -300,7 +302,7 @@ Every `api` statistic shares the same conventions:
 | --- | --- |
 | Scope | `format`, `report_month`, `baseline`, and `team_type`: the type's Showdown ID (e.g. `water`), or null for overall reports. Matchup charts are overall only and have no `team_type`. |
 | Identity | Each entity has an ID, its Showdown ID, and its name, e.g. `species_id`, `species` (`ninetalesalola`), and `species_name` (Ninetales-Alola). |
-| Proportions | Shares and rates run from 0 to 1 (Smogon prints percentages). Each column's description states its denominator. |
+| Proportions | Shares and rates run from 0 to 1 (Smogon prints percentages). Each column's description states its denominator. A weighted share of 0 means only players with no weight at that baseline (such as those with provisional ratings) used the option. |
 | Provenance | Every row has a `source_file_id` (one per report family in `report`) that links to `source_file`. |
 
 The diagram shows how the statistics join to the reference views; every table also links to `source_file`.
@@ -327,7 +329,7 @@ Row counts below are for September 2026.
 
 | Table | Rows | Contents |
 | --- | ---: | --- |
-| `source_file` | 154 | The Smogon files behind the statistics, with their URLs and retrieval times |
+| `source_file` | 154 | The Smogon files behind the statistics, with their URLs, retrieval times, sizes, and SHA-256 hashes |
 | `report` | 38 | One row per scope: battle count, average weight per team, average stalliness, and each family's file |
 | `pokemon_usage` | 2,892 | Usage rank and shares of teams (weighted and unweighted), share of Pokémon brought into battle, and Smogon's viability ceiling |
 | `pokemon_ability` | 3,831 | Share of each Pokémon's sets with each ability |
