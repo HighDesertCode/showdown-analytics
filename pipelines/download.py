@@ -9,6 +9,8 @@ import urllib.request
 USER_AGENT = "showdown-analytics (+https://github.com/HighDesertCode/showdown-analytics)"
 # Seconds to wait before each retry, so a download is tried at most three times.
 RETRY_WAITS = (5, 15)
+# Errors from a download that never succeeded (HTTPError, for any status, is a URLError).
+NETWORK_ERRORS = (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead)
 
 
 def fetch(url: str) -> bytes:
@@ -37,4 +39,4 @@ def _fetch_once(url: str) -> bytes:
 def _is_temporary(error: Exception) -> bool:
     if isinstance(error, urllib.error.HTTPError):
         return error.code == 429 or error.code >= 500
-    return isinstance(error, (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead))
+    return isinstance(error, NETWORK_ERRORS)

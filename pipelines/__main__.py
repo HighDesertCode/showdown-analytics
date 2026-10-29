@@ -1,9 +1,10 @@
 """Entry point: `uv run --env-file .env pipelines <command>`."""
 
 import argparse
+import sys
 from datetime import date
 
-from pipelines import db, showdown, smogon
+from pipelines import db, download, showdown, smogon
 from pipelines.raw.load import load_file
 from pipelines.reference.common import existing_ids
 from pipelines.reference.load import load_all
@@ -39,16 +40,28 @@ def load_smogon(month: date, families: list[str]) -> None:
         team_types = sorted(type_ids, key=type_ids.__getitem__)
         files = [file for family in families for file in smogon.report_files(family, month, team_types)]
         width = max(len(family) for family in families)
+        failed: list[tuple[smogon.ReportFile, Exception]] = []
         for file in files:
-            counts = load_file(conn, file, type_ids.get(file.team_type) if file.team_type else None)
+            scope = f"mono{file.team_type}" if file.team_type else "overall"
+            try:
+                counts = load_file(conn, file, type_ids.get(file.team_type) if file.team_type else None)
+            except download.NETWORK_ERRORS as error:
+                # The download comes before any insert, so there is nothing to roll back; a rerun loads the file.
+                failed.append((file, error))
+                print(f"{file.family:<{width}} {scope:<14} {file.baseline}  failed ({error})")
+                continue
             # Commit each file on its own: a later failure keeps earlier files, and a rerun skips them.
             conn.commit()
-            scope = f"mono{file.team_type}" if file.team_type else "overall"
             if counts is None:
                 result = "skipped (already loaded)"
             else:
                 result = "loaded " + "  ".join(f"{count:>6,} {table}" for table, count in counts.items())
             print(f"{file.family:<{width}} {scope:<14} {file.baseline}  {result}")
+    if failed:
+        print(f"\n{len(failed)} of {len(files)} files failed to download; rerun to load them:", file=sys.stderr)
+        for file, error in failed:
+            print(f"  {file.url}: {error}", file=sys.stderr)
+        raise SystemExit(1)
 
 
 def main() -> None:
