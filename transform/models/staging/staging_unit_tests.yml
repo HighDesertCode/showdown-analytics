@@ -19,3 +19,39 @@ unit_tests:
       rows:
         - {source_file_id: 2, team_type: null}
         - {source_file_id: 3, team_type: water}
+
+  - name: stg_chaos_pokemon_totals_ability_weights
+    description: >
+      ability_weight_total adds up only a Pokémon's ability weights (water Swampert: Torrent 1209.081 + Damp
+      220.313 = 1429.394), not its items or other options. Names match species by Showdown ID, which drops
+      spaces, hyphens, and apostrophes ("Oricorio-Pa'u" becomes oricoriopau).
+    model: stg_chaos_pokemon
+    given:
+      - input: source('raw', 'chaos_pokemon')
+        rows:
+          - {chaos_pokemon_id: 1, source_file_id: 5, pokemon: Swampert}
+          - {chaos_pokemon_id: 2, source_file_id: 5, pokemon: "Oricorio-Pa'u"}
+          - {chaos_pokemon_id: 3, source_file_id: 5, pokemon: Iron Valiant}
+      - input: source('raw', 'chaos_option')
+        rows:
+          - {chaos_pokemon_id: 1, category: abilities, label: torrent, weight: 1209.0809208735927}
+          - {chaos_pokemon_id: 1, category: abilities, label: damp, weight: 220.3128437707143}
+          - {chaos_pokemon_id: 1, category: items, label: leftovers, weight: 848.989}
+          - {chaos_pokemon_id: 2, category: abilities, label: dancer, weight: 12.5}
+          - {chaos_pokemon_id: 3, category: abilities, label: quarkdrive, weight: 640.25}
+      - input: ref('stg_source_file')
+        rows:
+          - {source_file_id: 5, format: gen9monotype, report_month: 2026-09-01, baseline: 1630, team_type: water}
+      - input: source('raw', 'chaos_report')
+        rows:
+          - {source_file_id: 5, battle_count: 63572}
+      - input: source('reference', 'species')
+        rows:
+          - {species_id: 10, showdown_id: swampert}
+          - {species_id: 20, showdown_id: oricoriopau}
+          - {species_id: 30, showdown_id: ironvaliant}
+    expect:
+      rows:
+        - {chaos_pokemon_id: 1, species_id: 10, ability_weight_total: 1429.393764644307}
+        - {chaos_pokemon_id: 2, species_id: 20, ability_weight_total: 12.5}
+        - {chaos_pokemon_id: 3, species_id: 30, ability_weight_total: 640.25}
