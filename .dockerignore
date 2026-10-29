@@ -1,0 +1,14 @@
+# An allowlist: only the files the pipelines image needs are sent to the build, so secrets such as .env,
+# local environments, and Git history can never end up in an image.
+*
+!pyproject.toml
+!uv.lock
+!.python-version
+!README.md
+!pipelines/
+!transform/
+**/__pycache__
+transform/target/
+transform/logs/
+transform/dbt_packages/
+transform/.user.yml
