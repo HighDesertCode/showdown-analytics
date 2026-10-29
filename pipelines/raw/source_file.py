@@ -27,12 +27,17 @@ def retrieve(file: ReportFile) -> RetrievedFile:
 
 
 def is_loaded(conn: Connection, retrieved: RetrievedFile) -> bool:
-    """True if this exact file (same URL and content) is already recorded."""
+    """True if the URL's latest recorded version has the same content.
+
+    Only the latest version counts, so a file that reverts to earlier content is recorded again. Versions are
+    ordered as in dbt's stg_source_file, so both agree on which one is current.
+    """
     row = conn.execute(
-        "SELECT EXISTS (SELECT 1 FROM raw.source_file WHERE url = %s AND content_sha256 = %s)",
-        (retrieved.file.url, retrieved.sha256),
+        "SELECT content_sha256 FROM raw.source_file WHERE url = %s"
+        " ORDER BY retrieved_at DESC, source_file_id DESC LIMIT 1",
+        (retrieved.file.url,),
     ).fetchone()
-    return row is not None and row[0]
+    return row is not None and row[0] == retrieved.sha256
 
 
 def insert(conn: Connection, retrieved: RetrievedFile, team_type_id: int | None) -> int:
