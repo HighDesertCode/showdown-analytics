@@ -291,8 +291,10 @@ Row counts below are for September 2026, the first month loaded.
 
 The `staging` and `api` schemas are built with [dbt](https://www.getdbt.com/) from `raw` and `reference` after each monthly load:
 
-- **`staging`** holds views that clean each raw table once: they keep only the latest version of each file, match Smogon's names to `reference` IDs, and flag placeholders such as empty move slots. Tests check that every name matches and nothing is duplicated.
-- **`api`** holds the published statistics as tables, rebuilt only after every test passes, and the reference data as views. Each model has a contract that fixes its column names, types, and constraints, so a change in Smogon's data fails the build rather than changing what clients see.
+- **`staging`** holds views that clean each raw table once: they keep only the latest version of each file, match Smogon's names to `reference` IDs, and flag placeholders such as empty move slots. Tests check that every name matches, nothing is duplicated, and every loaded month and baseline has all 77 files.
+- **`api`** holds the published statistics as tables and the reference data as views. Each model has a contract that fixes its column names, types, and constraints, so a change in Smogon's data fails the build rather than changing what clients see.
+
+`staging` is built and tested first, and `api` is rebuilt only if every staging test passes. Each `api` table's own tests run after that table is rebuilt, so when one fails, the table already holds the new data until the problem is fixed and the build is rerun.
 
 Every `api` statistic shares the same conventions:
 
