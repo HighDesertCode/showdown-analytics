@@ -55,3 +55,27 @@ unit_tests:
         - {chaos_pokemon_id: 1, species_id: 10, ability_weight_total: 1429.393764644307}
         - {chaos_pokemon_id: 2, species_id: 20, ability_weight_total: 12.5}
         - {chaos_pokemon_id: 3, species_id: 30, ability_weight_total: 640.25}
+
+  - name: stg_chaos_spread_splits_nature_and_evs
+    description: >
+      Each spread label splits into its nature, matched to reference.nature, and six EVs in HP/Atk/Def/SpA/SpD/Spe
+      order (water Swampert's "Adamant:236/76/176/0/8/12" has six different values, so any swapped column fails).
+      Only spread options are kept, and the original label stays.
+    model: stg_chaos_spread
+    given:
+      - input: source('raw', 'chaos_option')
+        rows:
+          - {chaos_pokemon_id: 1, category: spreads, label: "Careful:248/0/0/0/252/8", weight: 297.641840552464}
+          - {chaos_pokemon_id: 1, category: spreads, label: "Adamant:236/76/176/0/8/12", weight: 0.7124150650686821}
+          - {chaos_pokemon_id: 1, category: abilities, label: torrent, weight: 1209.0809208735927}
+      - input: ref('stg_chaos_pokemon')
+        rows:
+          - {chaos_pokemon_id: 1}
+      - input: source('reference', 'nature')
+        rows:
+          - {nature_id: 4, showdown_id: adamant}
+          - {nature_id: 22, showdown_id: careful}
+    expect:
+      rows:
+        - {nature_id: 22, label: "Careful:248/0/0/0/252/8", hp_evs: 248, atk_evs: 0, def_evs: 0, spa_evs: 0, spd_evs: 252, spe_evs: 8, weight: 297.641840552464}
+        - {nature_id: 4, label: "Adamant:236/76/176/0/8/12", hp_evs: 236, atk_evs: 76, def_evs: 176, spa_evs: 0, spd_evs: 8, spe_evs: 12, weight: 0.7124150650686821}
