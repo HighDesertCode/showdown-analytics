@@ -676,6 +676,15 @@ models:
         description: Where the file is published on smogon.com.
         data_type: text
         constraints: [{type: not_null}]
+      - name: content_sha256
+        description: >
+          SHA-256 of the file as downloaded, in lowercase hex; identifies which version of a republished file this is.
+        data_type: text
+        constraints: [{type: not_null}, {type: check, expression: "content_sha256 ~ '^[0-9a-f]{64}$'"}]
+      - name: byte_size
+        description: The file's size in bytes as downloaded.
+        data_type: integer
+        constraints: [{type: not_null}, {type: check, expression: "byte_size > 0"}]
       - name: retrieved_at
         data_type: timestamp with time zone
         constraints: [{type: not_null}]
