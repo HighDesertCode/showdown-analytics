@@ -1,0 +1,16 @@
+# Connection settings, read from environment variables (see .env); this file holds no secrets.
+# dbt connects as its own role (DBT_USER), never as the pipelines' showdown-analyst.
+showdown_analytics:
+  target: default
+  outputs:
+    default:
+      type: postgres
+      host: "{{ env_var('PGHOST') }}"
+      port: "{{ env_var('PGPORT') | as_number }}"
+      dbname: "{{ env_var('PGDATABASE') }}"
+      user: "{{ env_var('DBT_USER') }}"
+      password: "{{ env_var('DBT_PASSWORD') }}"
+      schema: staging
+      sslmode: "{{ env_var('PGSSLMODE', 'verify-full') }}"
+      sslrootcert: "{{ env_var('PGSSLROOTCERT', '') }}"
+      threads: 4

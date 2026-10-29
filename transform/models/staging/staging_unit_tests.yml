@@ -1,0 +1,21 @@
+# Unit tests: fixed input rows and the exact rows each model should return. They need no loaded data,
+# so CI runs them against empty tables. Only the columns a test depends on are listed.
+unit_tests:
+  - name: stg_source_file_keeps_latest_version
+    description: >
+      When Smogon republishes a file, the newer retrieval replaces the older one; per-type files get their
+      team type's Showdown ID and overall files get null.
+    model: stg_source_file
+    given:
+      - input: source('raw', 'source_file')
+        rows:
+          - {source_file_id: 1, url: "https://www.smogon.com/stats/2026-09/gen9monotype-1630.txt", retrieved_at: "2026-10-01 00:00:00+00", team_type_id: null}
+          - {source_file_id: 2, url: "https://www.smogon.com/stats/2026-09/gen9monotype-1630.txt", retrieved_at: "2026-10-05 00:00:00+00", team_type_id: null}
+          - {source_file_id: 3, url: "https://www.smogon.com/stats/2026-09/monotype/gen9monotype-monowater-1630.txt", retrieved_at: "2026-10-01 00:00:00+00", team_type_id: 11}
+      - input: source('reference', 'type')
+        rows:
+          - {type_id: 11, showdown_id: water}
+    expect:
+      rows:
+        - {source_file_id: 2, team_type: null}
+        - {source_file_id: 3, team_type: water}

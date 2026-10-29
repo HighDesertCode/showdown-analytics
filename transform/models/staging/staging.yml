@@ -1,0 +1,154 @@
+models:
+  - name: stg_source_file
+    description: The latest version of each Smogon file.
+    columns:
+      - name: source_file_id
+        data_tests: [unique, not_null]
+      - name: url
+        data_tests: [unique, not_null]
+      - name: family
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [chaos, usage, leads, metagame, matchup_chart]
+
+  - name: stg_usage_pokemon
+    description: Usage report rows matched to reference.species.
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "source_file_id || '-' || species_id"
+    columns:
+      - name: species_id
+        description: Null when Smogon's name matches no species; the not_null test turns that into a failure.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: source('reference', 'species')
+                field: species_id
+
+  - name: stg_usage_report
+    description: Battle count and average weight per team for each usage report.
+    columns:
+      - name: source_file_id
+        data_tests: [unique, not_null]
+
+  - name: stg_leads_pokemon
+    description: Leads report rows matched to reference.species.
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "source_file_id || '-' || species_id"
+    columns:
+      - name: species_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: source('reference', 'species')
+                field: species_id
+
+  - name: stg_metagame_report
+    description: Average stalliness per metagame report.
+    columns:
+      - name: source_file_id
+        data_tests: [unique, not_null]
+
+  - name: stg_metagame_tag
+    description: Metagame tags, with type tags matched to reference.type.
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "source_file_id || '-' || tag"
+
+  - name: stg_matchup_chart_cell
+    description: Matchup chart cells matched to reference.type.
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "source_file_id || '-' || type_id || '-' || opponent_type_id"
+    columns:
+      - name: type_id
+        data_tests: [not_null]
+      - name: opponent_type_id
+        data_tests: [not_null]
+
+  - name: stg_matchup_chart_viability
+    description: Smogon's ViabilityScore per type, matched to reference.type.
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "source_file_id || '-' || type_id"
+    columns:
+      - name: type_id
+        data_tests: [not_null]
+
+  - name: stg_chaos_pokemon
+    description: Chaos report Pokémon matched to reference.species, with the option denominator.
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "source_file_id || '-' || species_id"
+    columns:
+      - name: chaos_pokemon_id
+        data_tests: [unique, not_null]
+      - name: species_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: source('reference', 'species')
+                field: species_id
+      - name: ability_weight_total
+        data_tests: [not_null]
+
+  - name: stg_chaos_ability
+    columns:
+      - name: ability_id
+        data_tests: [not_null]
+
+  - name: stg_chaos_item
+    columns:
+      - name: item_id
+        description: Null only for Smogon's "nothing" (no held item).
+        data_tests:
+          - not_null:
+              config:
+                where: has_item
+
+  - name: stg_chaos_move
+    columns:
+      - name: move_id
+        description: Null only for Smogon's empty label (an unused move slot).
+        data_tests:
+          - not_null:
+              config:
+                where: NOT is_empty_slot
+
+  - name: stg_chaos_spread
+    columns:
+      - name: nature_id
+        data_tests: [not_null]
+      - name: hp_evs
+        data_tests: [not_null]
+      - name: spe_evs
+        data_tests: [not_null]
+
+  - name: stg_chaos_teammate
+    columns:
+      - name: teammate_species_id
+        description: Null only for Smogon's "empty" (an unfilled team slot).
+        data_tests:
+          - not_null:
+              config:
+                where: NOT is_empty_slot
+
+  - name: stg_chaos_counter
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "chaos_pokemon_id || '-' || opponent_species_id"
+    columns:
+      - name: opponent_species_id
+        data_tests: [not_null]

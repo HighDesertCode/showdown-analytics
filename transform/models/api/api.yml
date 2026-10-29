@@ -1,0 +1,673 @@
+models:
+  - name: report
+    description: >
+      One row per report scope (format, month, baseline, and team type), with its sample size and the
+      Smogon file behind each report family. A scope missing a family has a null file for it.
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "format || '-' || report_month || '-' || baseline || '-' || COALESCE(team_type, 'overall')"
+    columns:
+      - name: format
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: report_month
+        description: First day of the month.
+        data_type: date
+        constraints: [{type: not_null}]
+      - name: baseline
+        description: The rating baseline teams are weighted by, e.g. 1630 or 1760.
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: team_type
+        description: The team type's Showdown ID, e.g. water; null for overall reports.
+        data_type: text
+      - name: battle_count
+        description: Battles in the whole format that month; per-type reports repeat the overall total.
+        data_type: integer
+      - name: avg_team_weight
+        description: Average weight per team; small values mean few teams count toward this baseline.
+        data_type: numeric
+      - name: stalliness_mean
+        description: Average stalliness; negative means more offensive teams, positive more defensive.
+        data_type: numeric
+      - name: usage_source_file_id
+        data_type: bigint
+      - name: chaos_source_file_id
+        data_type: bigint
+      - name: leads_source_file_id
+        data_type: bigint
+      - name: metagame_source_file_id
+        data_type: bigint
+
+  - name: pokemon_usage
+    description: >
+      One row per Pokémon in each report scope, with its usage rank and shares and, where chaos lists it,
+      its viability ceiling.
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "format || '-' || report_month || '-' || baseline || '-' || COALESCE(team_type, 'overall') || '-' || species_id"
+    columns:
+      - name: format
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: report_month
+        data_type: date
+        constraints: [{type: not_null}]
+      - name: baseline
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: team_type
+        description: The team type's Showdown ID; null for overall reports.
+        data_type: text
+      - name: species_id
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: species
+        description: The species' Showdown ID, e.g. ninetalesalola.
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: species_name
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: rank
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: usage_share
+        description: Share of teams with this Pokémon, weighted by the baseline.
+        data_type: numeric
+        constraints: [{type: not_null}, {type: check, expression: "usage_share BETWEEN 0 AND 1"}]
+      - name: raw_count
+        description: Teams with this Pokémon, unweighted.
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: raw_share
+        description: Share of teams with this Pokémon, unweighted.
+        data_type: numeric
+        constraints: [{type: not_null}, {type: check, expression: "raw_share BETWEEN 0 AND 1"}]
+      - name: real_count
+        description: Times this Pokémon was brought into battle.
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: real_share
+        description: Share of all Pokémon brought into battle in this scope; Smogon's Real % divided by 600, not 100.
+        data_type: numeric
+        constraints: [{type: not_null}, {type: check, expression: "real_share BETWEEN 0 AND 1"}]
+      - name: viability_user_count
+        description: Players using this Pokémon in chaos's viability ceiling; null when chaos omits it.
+        data_type: integer
+      - name: viability_top_gxe
+        description: Highest GXE among those players.
+        data_type: integer
+      - name: viability_gxe_p99
+        description: 99th percentile GXE among those players.
+        data_type: integer
+      - name: viability_gxe_p95
+        description: 95th percentile GXE among those players.
+        data_type: integer
+      - name: usage_source_file_id
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: chaos_source_file_id
+        description: Null when chaos omits this Pokémon.
+        data_type: bigint
+
+  - name: pokemon_ability
+    description: Share of each Pokémon's sets with each ability.
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "format || '-' || report_month || '-' || baseline || '-' || COALESCE(team_type, 'overall') || '-' || species_id || '-' || ability_id"
+    columns:
+      - name: format
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: report_month
+        data_type: date
+        constraints: [{type: not_null}]
+      - name: baseline
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: team_type
+        description: The team type's Showdown ID; null for overall reports.
+        data_type: text
+      - name: species_id
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: species
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: species_name
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: ability_id
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: ability
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: ability_name
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: share
+        description: Share of this Pokémon's sets with this ability; sums to 1 per Pokémon.
+        data_type: numeric
+        constraints: [{type: not_null}, {type: check, expression: "share BETWEEN 0 AND 1"}]
+      - name: source_file_id
+        description: The chaos file this row comes from.
+        data_type: bigint
+        constraints: [{type: not_null}]
+
+  - name: pokemon_item
+    description: Share of each Pokémon's sets holding each item; sets with no item are one row with has_item false.
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "format || '-' || report_month || '-' || baseline || '-' || COALESCE(team_type, 'overall') || '-' || species_id || '-' || COALESCE(item_id::TEXT, 'none')"
+    columns:
+      - name: format
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: report_month
+        data_type: date
+        constraints: [{type: not_null}]
+      - name: baseline
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: team_type
+        description: The team type's Showdown ID; null for overall reports.
+        data_type: text
+      - name: species_id
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: species
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: species_name
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: has_item
+        data_type: boolean
+        constraints: [{type: not_null}]
+      - name: item_id
+        description: Null when has_item is false.
+        data_type: bigint
+      - name: item
+        data_type: text
+      - name: item_name
+        data_type: text
+      - name: share
+        description: Share of this Pokémon's sets holding this item; sums to 1 per Pokémon.
+        data_type: numeric
+        constraints: [{type: not_null}, {type: check, expression: "share BETWEEN 0 AND 1"}]
+      - name: source_file_id
+        description: The chaos file this row comes from.
+        data_type: bigint
+        constraints: [{type: not_null}]
+
+  - name: pokemon_move
+    description: Share of each Pokémon's sets with each move; unused move slots are left out.
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "format || '-' || report_month || '-' || baseline || '-' || COALESCE(team_type, 'overall') || '-' || species_id || '-' || move_id"
+    columns:
+      - name: format
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: report_month
+        data_type: date
+        constraints: [{type: not_null}]
+      - name: baseline
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: team_type
+        description: The team type's Showdown ID; null for overall reports.
+        data_type: text
+      - name: species_id
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: species
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: species_name
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: move_id
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: move
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: move_name
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: share
+        description: Share of this Pokémon's sets with this move; sums to at most 4 per Pokémon (four move slots).
+        data_type: numeric
+        constraints: [{type: not_null}, {type: check, expression: "share BETWEEN 0 AND 1"}]
+      - name: source_file_id
+        description: The chaos file this row comes from.
+        data_type: bigint
+        constraints: [{type: not_null}]
+
+  - name: pokemon_spread
+    description: Share of each Pokémon's sets with each nature and EV spread.
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "format || '-' || report_month || '-' || baseline || '-' || COALESCE(team_type, 'overall') || '-' || species_id || '-' || spread"
+    columns:
+      - name: format
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: report_month
+        data_type: date
+        constraints: [{type: not_null}]
+      - name: baseline
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: team_type
+        description: The team type's Showdown ID; null for overall reports.
+        data_type: text
+      - name: species_id
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: species
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: species_name
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: spread
+        description: Smogon's label, e.g. Timid:0/0/4/252/0/252.
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: nature_id
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: nature
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: nature_name
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: hp_evs
+        data_type: smallint
+        constraints: [{type: not_null}]
+      - name: atk_evs
+        data_type: smallint
+        constraints: [{type: not_null}]
+      - name: def_evs
+        data_type: smallint
+        constraints: [{type: not_null}]
+      - name: spa_evs
+        data_type: smallint
+        constraints: [{type: not_null}]
+      - name: spd_evs
+        data_type: smallint
+        constraints: [{type: not_null}]
+      - name: spe_evs
+        data_type: smallint
+        constraints: [{type: not_null}]
+      - name: share
+        description: Share of this Pokémon's sets with this spread; sums to 1 per Pokémon.
+        data_type: numeric
+        constraints: [{type: not_null}, {type: check, expression: "share BETWEEN 0 AND 1"}]
+      - name: source_file_id
+        description: The chaos file this row comes from.
+        data_type: bigint
+        constraints: [{type: not_null}]
+
+  - name: pokemon_teammate
+    description: Share of each Pokémon's teams that include each teammate; unfilled team slots are left out.
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "format || '-' || report_month || '-' || baseline || '-' || COALESCE(team_type, 'overall') || '-' || species_id || '-' || teammate_species_id"
+    columns:
+      - name: format
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: report_month
+        data_type: date
+        constraints: [{type: not_null}]
+      - name: baseline
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: team_type
+        description: The team type's Showdown ID; null for overall reports.
+        data_type: text
+      - name: species_id
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: species
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: species_name
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: teammate_species_id
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: teammate_species
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: teammate_species_name
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: share
+        description: Share of this Pokémon's teams with this teammate; sums to just under 5 per Pokémon, since chaos omits negligible teammates.
+        data_type: numeric
+        constraints: [{type: not_null}, {type: check, expression: "share BETWEEN 0 AND 1"}]
+      - name: source_file_id
+        description: The chaos file this row comes from.
+        data_type: bigint
+        constraints: [{type: not_null}]
+
+  - name: pokemon_counter
+    description: >
+      Checks and counters per Pokémon, from overall chaos reports only. Smogon ranks them by score.
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "format || '-' || report_month || '-' || baseline || '-' || COALESCE(team_type, 'overall') || '-' || species_id || '-' || opponent_species_id"
+    columns:
+      - name: format
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: report_month
+        data_type: date
+        constraints: [{type: not_null}]
+      - name: baseline
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: team_type
+        description: The team type's Showdown ID; null for overall reports.
+        data_type: text
+      - name: species_id
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: species
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: species_name
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: opponent_species_id
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: opponent_species
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: opponent_species_name
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: encounters
+        description: Weighted encounters between the two Pokémon that ended with one KOed or switched out.
+        data_type: numeric
+        constraints: [{type: not_null}, {type: check, expression: "encounters >= 0"}]
+      - name: ko_or_switch_rate
+        description: Share of those encounters where this Pokémon was KOed or forced out by the opponent.
+        data_type: numeric
+        constraints: [{type: not_null}, {type: check, expression: "ko_or_switch_rate BETWEEN 0 AND 1"}]
+      - name: ko_or_switch_rate_std_dev
+        description: Standard deviation of ko_or_switch_rate; larger with fewer encounters.
+        data_type: numeric
+        constraints: [{type: not_null}, {type: check, expression: "ko_or_switch_rate_std_dev >= 0"}]
+      - name: score
+        description: Smogon's ranking score, ko_or_switch_rate - 4 × std dev; a cautious estimate that can be negative.
+        data_type: numeric
+        constraints: [{type: not_null}]
+      - name: source_file_id
+        description: The chaos file this row comes from.
+        data_type: bigint
+        constraints: [{type: not_null}]
+
+  - name: pokemon_lead
+    description: How often each Pokémon is sent out first, per report scope.
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "format || '-' || report_month || '-' || baseline || '-' || COALESCE(team_type, 'overall') || '-' || species_id"
+    columns:
+      - name: format
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: report_month
+        data_type: date
+        constraints: [{type: not_null}]
+      - name: baseline
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: team_type
+        description: The team type's Showdown ID; null for overall reports.
+        data_type: text
+      - name: species_id
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: species
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: species_name
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: rank
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: lead_share
+        description: Share of leads, weighted by the baseline; sums to 1 per report.
+        data_type: numeric
+        constraints: [{type: not_null}, {type: check, expression: "lead_share BETWEEN 0 AND 1"}]
+      - name: raw_count
+        description: Times this Pokémon led, unweighted.
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: raw_lead_share
+        description: Share of leads, unweighted; sums to 1 per report.
+        data_type: numeric
+        constraints: [{type: not_null}, {type: check, expression: "raw_lead_share BETWEEN 0 AND 1"}]
+      - name: source_file_id
+        description: The leads file this row comes from.
+        data_type: bigint
+        constraints: [{type: not_null}]
+
+  - name: metagame_tag
+    description: Share of teams with each metagame tag, per report scope; tags overlap, so shares don't sum to 1.
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "format || '-' || report_month || '-' || baseline || '-' || COALESCE(team_type, 'overall') || '-' || tag"
+    columns:
+      - name: format
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: report_month
+        data_type: date
+        constraints: [{type: not_null}]
+      - name: baseline
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: team_type
+        description: The team type's Showdown ID; null for overall reports.
+        data_type: text
+      - name: tag
+        description: Smogon's tag, e.g. monoice, hail, stall.
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: tag_team_type
+        description: The type's Showdown ID for type tags (e.g. ice for monoice); null for other tags.
+        data_type: text
+      - name: share
+        description: Share of teams with this tag, weighted by the baseline.
+        data_type: numeric
+        constraints: [{type: not_null}, {type: check, expression: "share BETWEEN 0 AND 1"}]
+      - name: source_file_id
+        description: The metagame file this row comes from.
+        data_type: bigint
+        constraints: [{type: not_null}]
+
+  - name: type_matchup
+    description: Weighted wins and win rate for each type against each other type, from overall matchup charts.
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "format || '-' || report_month || '-' || baseline || '-' || type_id || '-' || opponent_type_id"
+    columns:
+      - name: format
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: report_month
+        data_type: date
+        constraints: [{type: not_null}]
+      - name: baseline
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: type_id
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: type
+        description: The team type's Showdown ID, e.g. water.
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: type_name
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: opponent_type_id
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: opponent_type
+        description: The opponent type's Showdown ID, e.g. water.
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: opponent_type_name
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: is_mirror
+        description: True when a type faces itself.
+        data_type: boolean
+        constraints: [{type: not_null}]
+      - name: wins
+        description: Weighted wins for this type in this pairing.
+        data_type: numeric
+        constraints: [{type: not_null}, {type: check, expression: "wins >= 0"}]
+      - name: win_rate
+        description: Wins divided by all wins in this pairing; null for mirror matches.
+        data_type: numeric
+        constraints: [{type: check, expression: "win_rate BETWEEN 0 AND 1"}]
+      - name: source_file_id
+        description: The matchup chart this row comes from.
+        data_type: bigint
+        constraints: [{type: not_null}]
+
+  - name: type_viability
+    description: Smogon's ViabilityScore per type, from overall matchup charts; a published score, not a win rate.
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "format || '-' || report_month || '-' || baseline || '-' || type_id"
+    columns:
+      - name: format
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: report_month
+        data_type: date
+        constraints: [{type: not_null}]
+      - name: baseline
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: type_id
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: type
+        description: The team type's Showdown ID, e.g. water.
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: type_name
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: viability_score
+        data_type: numeric
+        constraints: [{type: not_null}]
+      - name: rank
+        description: 1 for the highest viability score in the chart.
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: source_file_id
+        description: The matchup chart this row comes from.
+        data_type: bigint
+        constraints: [{type: not_null}]
+
+  - name: source_file
+    description: The Smogon files behind the api tables, one per URL (the latest version).
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "source_file_id"
+    columns:
+      - name: source_file_id
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: family
+        description: chaos, usage, leads, metagame, or matchup_chart.
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: format
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: report_month
+        data_type: date
+        constraints: [{type: not_null}]
+      - name: baseline
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: team_type
+        description: The team type's Showdown ID; null for overall reports.
+        data_type: text
+      - name: url
+        description: Where the file is published on smogon.com.
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: retrieved_at
+        data_type: timestamp with time zone
+        constraints: [{type: not_null}]

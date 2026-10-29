@@ -1,0 +1,113 @@
+# Unit tests: fixed input rows and the exact rows each model should return. They need no loaded data,
+# so CI runs them against empty tables. Only the columns a test depends on are listed.
+# Values come from the September 2026 Smogon reports.
+unit_tests:
+  - name: pokemon_usage_converts_percentages_to_shares
+    description: >
+      Usage and raw percentages divide by 100; real percentage divides by 600, because Smogon scales it to sum
+      to 600%. A Pokémon chaos omits keeps its usage row with null viability columns.
+    model: pokemon_usage
+    given:
+      - input: ref('stg_usage_pokemon')
+        rows:
+          - {source_file_id: 1, format: gen9monotype, report_month: 2026-09-01, baseline: 1630, team_type: ice, species_id: 10, rank: 1, usage_percent: 98.79021, raw_percent: 87.312, real_percent: 104.082}
+          - {source_file_id: 1, format: gen9monotype, report_month: 2026-09-01, baseline: 1630, team_type: ice, species_id: 20, rank: 30, usage_percent: 0.00012, raw_percent: 0.021, real_percent: 0.006}
+      - input: source('reference', 'species')
+        rows:
+          - {species_id: 10, showdown_id: ninetalesalola, name: Ninetales-Alola}
+          - {species_id: 20, showdown_id: snom, name: Snom}
+      - input: ref('stg_chaos_pokemon')
+        rows:
+          - {source_file_id: 2, format: gen9monotype, report_month: 2026-09-01, baseline: 1630, team_type: ice, species_id: 10, viability_user_count: 504, viability_top_gxe: 82}
+    expect:
+      rows:
+        - {species: ninetalesalola, usage_share: 0.9879021, raw_share: 0.87312, real_share: 0.17347, viability_user_count: 504, viability_top_gxe: 82, chaos_source_file_id: 2}
+        - {species: snom, usage_share: 0.0000012, raw_share: 0.00021, real_share: 0.00001, viability_user_count: null, viability_top_gxe: null, chaos_source_file_id: null}
+
+  - name: pokemon_item_divides_by_ability_weight_total
+    description: >
+      Each item's share is its weight divided by the Pokémon's total ability weight, which matches Smogon's
+      moveset reports (water Swampert's Leftovers: 848.989 / 1429.394 = 59.395%). Sets with no held item keep
+      their share with has_item false and a null item.
+    model: pokemon_item
+    given:
+      - input: ref('stg_chaos_item')
+        rows:
+          - {chaos_pokemon_id: 1, item_id: 100, has_item: true, weight: 848.989}
+          - {chaos_pokemon_id: 1, item_id: null, has_item: false, weight: 580.405}
+      - input: ref('stg_chaos_pokemon')
+        rows:
+          - {chaos_pokemon_id: 1, source_file_id: 5, format: gen9monotype, report_month: 2026-09-01, baseline: 1630, team_type: water, species_id: 10, ability_weight_total: 1429.394}
+      - input: source('reference', 'species')
+        rows:
+          - {species_id: 10, showdown_id: swampert, name: Swampert}
+      - input: source('reference', 'item')
+        rows:
+          - {item_id: 100, showdown_id: leftovers, name: Leftovers}
+    expect:
+      rows:
+        - {species: swampert, has_item: true, item: leftovers, share: 0.5939503034, source_file_id: 5}
+        - {species: swampert, has_item: false, item: null, share: 0.4060496966, source_file_id: 5}
+
+  - name: pokemon_move_leaves_out_empty_slots
+    description: >
+      Unused move slots are dropped: Smogon counts each one, so their total isn't a share of sets.
+    model: pokemon_move
+    given:
+      - input: ref('stg_chaos_move')
+        rows:
+          - {chaos_pokemon_id: 1, move_id: 200, is_empty_slot: false, weight: 1413.68}
+          - {chaos_pokemon_id: 1, move_id: null, is_empty_slot: true, weight: 30.5}
+      - input: ref('stg_chaos_pokemon')
+        rows:
+          - {chaos_pokemon_id: 1, source_file_id: 5, format: gen9monotype, report_month: 2026-09-01, baseline: 1630, team_type: water, species_id: 10, ability_weight_total: 1429.394}
+      - input: source('reference', 'species')
+        rows:
+          - {species_id: 10, showdown_id: swampert, name: Swampert}
+      - input: source('reference', 'move')
+        rows:
+          - {move_id: 200, showdown_id: earthquake, name: Earthquake}
+    expect:
+      rows:
+        - {species: swampert, move: earthquake, share: 0.98900653}
+
+  - name: type_matchup_nulls_mirror_win_rate
+    description: >
+      Win percentages divide by 100 (Water vs Ground: 72.636% becomes 0.72636). Smogon prints mirror matches
+      as 0%, so their win_rate is null, while their wins are kept.
+    model: type_matchup
+    given:
+      - input: ref('stg_matchup_chart_cell')
+        rows:
+          - {source_file_id: 9, format: gen9monotype, report_month: 2026-09-01, baseline: 1630, type_id: 11, opponent_type_id: 9, is_mirror: false, wins: 71.16, win_percent: 72.636}
+          - {source_file_id: 9, format: gen9monotype, report_month: 2026-09-01, baseline: 1630, type_id: 11, opponent_type_id: 11, is_mirror: true, wins: 32.91, win_percent: 0.000}
+      - input: source('reference', 'type')
+        rows:
+          - {type_id: 9, showdown_id: ground, name: Ground}
+          - {type_id: 11, showdown_id: water, name: Water}
+    expect:
+      rows:
+        - {type: water, opponent_type: ground, wins: 71.16, win_rate: 0.72636}
+        - {type: water, opponent_type: water, wins: 32.91, win_rate: null}
+
+  - name: report_keeps_scope_missing_a_family
+    description: >
+      Each scope gets one row with a file column per family. A scope missing a family (here, no leads file)
+      keeps its row with a null file for it. Matchup charts are left out.
+    model: report
+    given:
+      - input: ref('stg_source_file')
+        rows:
+          - {source_file_id: 1, family: usage, format: gen9monotype, report_month: 2026-09-01, baseline: 1630, team_type: ice}
+          - {source_file_id: 2, family: chaos, format: gen9monotype, report_month: 2026-09-01, baseline: 1630, team_type: ice}
+          - {source_file_id: 3, family: metagame, format: gen9monotype, report_month: 2026-09-01, baseline: 1630, team_type: ice}
+          - {source_file_id: 4, family: matchup_chart, format: gen9monotype, report_month: 2026-09-01, baseline: 1630, team_type: null}
+      - input: ref('stg_usage_report')
+        rows:
+          - {source_file_id: 1, battle_count: 63572, avg_team_weight: 0.003}
+      - input: ref('stg_metagame_report')
+        rows:
+          - {source_file_id: 3, stalliness_mean: 0.765}
+    expect:
+      rows:
+        - {team_type: ice, battle_count: 63572, avg_team_weight: 0.003, stalliness_mean: 0.765, usage_source_file_id: 1, chaos_source_file_id: 2, leads_source_file_id: null, metagame_source_file_id: 3}

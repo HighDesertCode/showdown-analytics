@@ -1,4 +1,4 @@
-name: Python pipelines lint
+name: Pipelines Lint
 
 on:
   pull_request:
@@ -8,7 +8,7 @@ on:
       - "pyproject.toml"
       - "uv.lock"
       - ".python-version"
-      - ".github/workflows/python-pipelines-lint.yml"
+      - ".github/workflows/pipelines-lint.yml"
 
 permissions:
   contents: read

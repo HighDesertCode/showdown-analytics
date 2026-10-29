@@ -1,0 +1,59 @@
+name: Transform Tests
+
+on:
+  pull_request:
+    paths:
+      - "transform/**"
+      - "sql/**"
+      - "tests/transform/**"
+      - "tests/pipelines/conftest.py"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".python-version"
+      - ".github/workflows/transform-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    # dbt connects as showdown-transform, with the throwaway password setup_database.py gives it.
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGDATABASE: postgres
+      PGSSLMODE: disable
+      DBT_USER: showdown-transform
+      DBT_PASSWORD: transform
+    steps:
+      - name: Repository Checkout
+        uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.2
+
+      - name: Install Dependencies
+        run: uv sync --locked --group dbt
+
+      - name: Set Up Database
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: uv run python tests/transform/setup_database.py
+
+      # Builds every model against the empty tables (checking contracts and grants) and runs all tests,
+      # including the unit tests, which supply their own input rows.
+      - name: dbt Build
+        run: uv run --group dbt dbt build --project-dir transform --profiles-dir transform

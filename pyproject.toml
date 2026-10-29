@@ -35,3 +35,8 @@ dev = [
     "ruff==0.17.2",
     "ty==0.0.92",
 ]
+# dbt for transform/; installed only when requested (uv run --group dbt ...).
+dbt = [
+    "dbt-core==1.12.6",
+    "dbt-postgres==1.11.0",
+]
