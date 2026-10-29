@@ -18,7 +18,7 @@ SELECT
     usage.raw_count,
     TRIM_SCALE(usage.raw_percent / 100) AS raw_share,
     usage.real_count,
-    TRIM_SCALE(ROUND(usage.real_percent / 600, 8)) AS real_share,
+    TRIM_SCALE(ROUND(usage.real_percent / 600, 10)) AS real_share,
     chaos.viability_user_count,
     CASE WHEN chaos.viability_user_count > 0 THEN chaos.viability_top_gxe END AS viability_top_gxe,
     CASE WHEN chaos.viability_user_count > 0 THEN chaos.viability_gxe_p99 END AS viability_gxe_p99,
