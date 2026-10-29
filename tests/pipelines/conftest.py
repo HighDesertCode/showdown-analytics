@@ -41,6 +41,7 @@ SQL_FILES = [
     "create/raw/matchup_chart_report.sql",
     "create/raw/matchup_chart_cell.sql",
     "create/raw/matchup_chart_viability.sql",
+    "create/raw/ingestion_run.sql",
     "create/staging/schema.sql",
     "create/api/schema.sql",
 ]
