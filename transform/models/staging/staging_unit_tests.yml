@@ -79,3 +79,29 @@ unit_tests:
       rows:
         - {nature_id: 22, label: "Careful:248/0/0/0/252/8", hp_evs: 248, atk_evs: 0, def_evs: 0, spa_evs: 0, spd_evs: 252, spe_evs: 8, weight: 297.641840552464}
         - {nature_id: 4, label: "Adamant:236/76/176/0/8/12", hp_evs: 236, atk_evs: 76, def_evs: 176, spa_evs: 0, spd_evs: 8, spe_evs: 12, weight: 0.7124150650686821}
+
+  - name: stg_metagame_tag_matches_type_tags
+    description: >
+      A tag of "mono" plus a type's Showdown ID gets that type in tag_team_type (water's "monowater"). Other
+      tags keep a null tag_team_type, including "monotype", which every team has but names no type.
+    model: stg_metagame_tag
+    given:
+      - input: source('raw', 'metagame_tag')
+        rows:
+          - {source_file_id: 7, tag: monowater, percent: 100.00000}
+          - {source_file_id: 7, tag: monotype, percent: 100.00000}
+          - {source_file_id: 7, tag: stall, percent: 69.96818}
+          - {source_file_id: 7, tag: rain, percent: 28.11969}
+      - input: ref('stg_source_file')
+        rows:
+          - {source_file_id: 7, format: gen9monotype, report_month: 2026-09-01, baseline: 1630, team_type: water}
+      - input: source('reference', 'type')
+        rows:
+          - {type_id: 6, showdown_id: fire}
+          - {type_id: 11, showdown_id: water}
+    expect:
+      rows:
+        - {team_type: water, tag: monowater, tag_team_type: water, percent: 100.00000}
+        - {team_type: water, tag: monotype, tag_team_type: null, percent: 100.00000}
+        - {team_type: water, tag: stall, tag_team_type: null, percent: 69.96818}
+        - {team_type: water, tag: rain, tag_team_type: null, percent: 28.11969}
