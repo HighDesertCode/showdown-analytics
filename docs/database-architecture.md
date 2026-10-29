@@ -268,16 +268,16 @@ erDiagram
     }
 ```
 
-Row counts below are for September 2026, the first month loaded.
+Row counts below are for September 2026.
 
 | Table | Rows | Contents |
 | --- | ---: | --- |
 | `source_file` | 154 | 38 files each for chaos, usage, leads, and metagame (overall and 18 types at two baselines); 2 matchup charts |
 | `chaos_report` | 38 | Each chaos file's header: format, baseline, team type, and battle count |
-| `chaos_pokemon` | 1,862 | Usage and viability ceiling per Pokémon; 1760 files omit Pokémon with negligible weight |
+| `chaos_pokemon` | 1,862 | Usage and viability ceiling per Pokémon; both baselines omit Pokémon under 0.01% weighted usage |
 | `chaos_option` | 284,261 | Weighted abilities, items, moves, spreads, teammates, Tera types, and happiness |
 | `chaos_counter` | 2,710 | Checks and counters; only overall reports include them |
-| `usage_report` | 38 | Battle count and average weight per team, which shows how much data a baseline rests on |
+| `usage_report` | 38 | Battle count and average weight per team; per-type reports divide by all teams in the format |
 | `usage_pokemon` | 2,892 | Rank and usage per Pokémon; real percent is scaled to sum to 600% (six team slots), so it can exceed 100% |
 | `leads_report` | 38 | Total leads (two per battle), counted across all teams even in per-type reports |
 | `leads_pokemon` | 2,550 | Lead rank and usage per Pokémon |
@@ -302,7 +302,7 @@ Every `api` statistic shares the same conventions:
 | --- | --- |
 | Scope | `format`, `report_month`, `baseline`, and `team_type`: the type's Showdown ID (e.g. `water`), or null for overall reports. Matchup charts are overall only and have no `team_type`. |
 | Identity | Each entity has an ID, its Showdown ID, and its name, e.g. `species_id`, `species` (`ninetalesalola`), and `species_name` (Ninetales-Alola). |
-| Proportions | Shares and rates run from 0 to 1 (Smogon prints percentages). Each column's description states its denominator. |
+| Proportions | Shares and rates run from 0 to 1 (Smogon prints percentages). Each column's description states its denominator. A weighted share of 0 means only players with no weight at that baseline (such as those with provisional ratings) used the option. |
 | Provenance | Every row has a `source_file_id` (one per report family in `report`) that links to `source_file`. |
 
 The diagram shows how the statistics join to the reference views; every table also links to `source_file`.
