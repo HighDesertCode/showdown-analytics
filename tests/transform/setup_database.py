@@ -12,19 +12,18 @@ import psycopg
 from psycopg import sql
 
 ROOT = Path(__file__).resolve().parents[2]
-PERMISSION_FILES = ["permissions/showdown_analyst.sql", "permissions/showdown_transform.sql"]
 PROTECTED_DATABASES = {"showdown-database", "defaultdb"}
 # Throwaway passwords for a CI-only server; the workflow passes the same values to dbt.
 ROLES = {"doadmin": "doadmin", "showdown-analyst": "analyst", "showdown-transform": "transform"}
 
 
 def sql_files() -> list[str]:
-    """The create and index order, from tests/pipelines/conftest.py, so it is defined in one place."""
+    """The create, index, and permission order, from tests/pipelines/conftest.py, so it is defined in one place."""
     spec = importlib.util.spec_from_file_location("conftest", ROOT / "tests/pipelines/conftest.py")
     assert spec and spec.loader
     conftest = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(conftest)
-    return conftest.SQL_FILES
+    return conftest.SQL_FILES + conftest.PERMISSION_FILES
 
 
 def main() -> None:
@@ -43,7 +42,7 @@ def main() -> None:
 
     # Run as doadmin, as in production, so its default privileges apply to the tables it creates.
     with psycopg.connect(url, user="doadmin", password=ROLES["doadmin"], autocommit=True) as conn:
-        for name in sql_files() + PERMISSION_FILES:
+        for name in sql_files():
             conn.execute((ROOT / "sql" / name).read_bytes())
     print(f"Set up {database} with {len(ROLES)} roles")
 
