@@ -1,0 +1,31 @@
+name: Pipelines Docker
+
+on:
+  pull_request:
+    paths:
+      - "pipelines/**"
+      - "transform/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".python-version"
+      - "README.md"
+      - ".dockerignore"
+      - ".github/workflows/pipelines-docker.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repository Checkout
+        uses: actions/checkout@v7
+
+      - name: Build Image
+        run: docker build -f pipelines/Dockerfile -t showdown-pipelines .
+
+      - name: Check Commands
+        run: |
+          docker run --rm showdown-pipelines pipelines --help
+          docker run --rm showdown-pipelines dbt --version

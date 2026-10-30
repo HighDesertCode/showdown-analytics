@@ -287,6 +287,8 @@ Row counts below are for September 2026.
 | `matchup_chart_cell` | 648 | Weighted wins and win percent for each of the 18 × 18 type pairings; mirror matches show 0% |
 | `matchup_chart_viability` | 36 | Smogon's ViabilityScore per type, a published score rather than a win rate |
 
+`ingestion_run` logs each `load-smogon` run: when it started and finished, its status (`running`, `succeeded`, `partial` when some downloads failed, or `failed` with the error), and how many files it loaded, skipped, and failed. The run updates its own row as it goes, the only update the loader can make, so a run killed partway through stays `running` and shows how far it got.
+
 ## Published Statistics
 
 The `staging` and `api` schemas are built with [dbt](https://www.getdbt.com/) from `raw` and `reference` after each monthly load:
@@ -331,6 +333,7 @@ Row counts below are for September 2026.
 | --- | ---: | --- |
 | `source_file` | 154 | The Smogon files behind the statistics, with their URLs, retrieval times, sizes, and SHA-256 hashes |
 | `report` | 38 | One row per scope: battle count, average weight per team, average stalliness, and each family's file |
+| `available_month` | 2 | One row per month and baseline, with its file count and latest retrieval time; the newest month is the latest data |
 | `pokemon_usage` | 2,892 | Usage rank and shares of teams (weighted and unweighted), share of Pokémon brought into battle, and Smogon's viability ceiling |
 | `pokemon_ability` | 3,831 | Share of each Pokémon's sets with each ability |
 | `pokemon_item` | 32,630 | Share of sets holding each item, including sets with no item |

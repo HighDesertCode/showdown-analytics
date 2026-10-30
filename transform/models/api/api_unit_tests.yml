@@ -117,3 +117,22 @@ unit_tests:
     expect:
       rows:
         - {team_type: ice, battle_count: 63572, avg_team_weight: 0.003, stalliness_mean: 0.765, usage_source_file_id: 1, chaos_source_file_id: 2, leads_source_file_id: null, metagame_source_file_id: 3}
+
+  - name: available_month_counts_files_and_latest_retrieval
+    description: >
+      Each month and baseline gets one row with its file count and the newest retrieval time, which comes from
+      a republished file reloaded after the rest.
+    model: available_month
+    given:
+      - input: ref('stg_source_file')
+        rows:
+          - {format: gen9monotype, report_month: 2026-09-01, baseline: 1630, retrieved_at: "2026-10-01 12:00:00+00"}
+          - {format: gen9monotype, report_month: 2026-09-01, baseline: 1630, retrieved_at: "2026-10-05 08:00:00+00"}
+          - {format: gen9monotype, report_month: 2026-09-01, baseline: 1760, retrieved_at: "2026-10-01 12:01:00+00"}
+          - {format: gen9monotype, report_month: 2026-08-01, baseline: 1630, retrieved_at: "2026-09-02 09:00:00+00"}
+    expect:
+      rows:
+        - {report_month: 2026-09-01, baseline: 1630, file_count: 2, last_retrieved_at: "2026-10-05 08:00:00+00"}
+        - {report_month: 2026-09-01, baseline: 1760, file_count: 1, last_retrieved_at: "2026-10-01 12:01:00+00"}
+        - {report_month: 2026-08-01, baseline: 1630, file_count: 1, last_retrieved_at: "2026-09-02 09:00:00+00"}
+
