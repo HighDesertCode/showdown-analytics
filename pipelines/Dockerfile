@@ -15,7 +15,11 @@ RUN uv sync --locked --no-dev --group dbt --no-editable
 
 # Stage 3: the image that runs: the virtual environment and the dbt project, as an unprivileged user.
 FROM python:3.13-slim
-RUN useradd --create-home --uid 10001 pipelines
+# Remove pip, which the job never uses (its bundled copies of urllib3 and msgpack are flagged by scanners), and
+# drop setuid bits, so programs like su and mount can't be used to gain privileges.
+RUN python -m pip uninstall --yes pip \
+    && find / -xdev -perm /6000 -type f -exec chmod a-s {} + \
+    && useradd --create-home --uid 10001 pipelines
 WORKDIR /app
 COPY --from=build /app/.venv .venv
 COPY transform transform
