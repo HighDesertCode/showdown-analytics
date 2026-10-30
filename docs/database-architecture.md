@@ -333,6 +333,7 @@ Row counts below are for September 2026.
 | --- | ---: | --- |
 | `source_file` | 154 | The Smogon files behind the statistics, with their URLs, retrieval times, sizes, and SHA-256 hashes |
 | `report` | 38 | One row per scope: battle count, average weight per team, average stalliness, and each family's file |
+| `available_month` | 2 | One row per month and baseline, with its file count and latest retrieval time; the newest month is the latest data |
 | `pokemon_usage` | 2,892 | Usage rank and shares of teams (weighted and unweighted), share of Pokémon brought into battle, and Smogon's viability ceiling |
 | `pokemon_ability` | 3,831 | Share of each Pokémon's sets with each ability |
 | `pokemon_item` | 32,630 | Share of sets holding each item, including sets with no item |

@@ -688,3 +688,35 @@ models:
       - name: retrieved_at
         data_type: timestamp with time zone
         constraints: [{type: not_null}]
+
+  - name: available_month
+    description: >
+      One row per month and baseline in the api tables. Every month here is complete: the build fails unless
+      each one has all 77 files. The latest month is the newest report_month.
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "format || '-' || report_month || '-' || baseline"
+    columns:
+      - name: format
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: report_month
+        description: First day of the month.
+        data_type: date
+        constraints: [{type: not_null}]
+      - name: baseline
+        description: The rating baseline teams are weighted by, e.g. 1630 or 1760.
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: file_count
+        description: The Smogon files behind this month and baseline (the latest version of each).
+        data_type: integer
+        constraints: [{type: not_null}, {type: check, expression: "file_count > 0"}]
+      - name: last_retrieved_at
+        description: When the newest of those files was retrieved, including a reloaded republished file.
+        data_type: timestamp with time zone
+        constraints: [{type: not_null}]
