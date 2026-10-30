@@ -8,7 +8,7 @@ Showdown Analytics stores competitive Pokémon data in PostgreSQL: reference dat
 | --- | --- |
 | Provider | DigitalOcean Managed Databases |
 | Engine | PostgreSQL 18 |
-| Region | San Francisco (`sfo2`) |
+| Region | San Francisco (`sfo3`) |
 | Size | 1 node: 1 vCPU, 1 GB RAM, 10 GiB storage |
 | Database | `showdown-database` |
 | Connections | Private network only, from trusted sources; TLS required |
