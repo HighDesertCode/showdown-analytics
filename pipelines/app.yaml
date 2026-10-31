@@ -1,0 +1,50 @@
+# App Platform spec for the scheduled ingestion job. <Placeholders> are filled in only in the control panel or a
+# local copy that stays out of Git; secrets are set as encrypted SECRET variables, never written here.
+name: showdown-pipelines
+region: sfo
+vpc:
+  id: <vpc-id> # the database's VPC, so the job connects privately
+databases:
+  - name: showdown-db # attached for the trusted source and the bindable variables below
+    engine: PG
+    production: true
+    cluster_name: <cluster-name>
+    db_name: showdown-database
+    db_user: showdown-analyst
+jobs:
+  - name: update-smogon
+    kind: SCHEDULED
+    schedule:
+      cron: "0 8 * * *" # daily; the command does nothing until last month is published
+      time_zone: America/Los_Angeles
+    github:
+      repo: HighDesertCode/showdown-analytics
+      branch: main
+      deploy_on_push: true # each merge to main rebuilds the image
+    dockerfile_path: pipelines/Dockerfile
+    run_command: pipelines update-smogon
+    instance_size_slug: apps-s-1vcpu-1gb
+    envs:
+      # The binding gives the public hostname; the private one adds this prefix, and verify-full rejects a mismatch.
+      - key: PGHOST
+        value: private-${showdown-db.HOSTNAME}
+      - key: PGPORT
+        value: ${showdown-db.PORT}
+      - key: PGDATABASE
+        value: ${showdown-db.DATABASE}
+      - key: PGUSER
+        value: ${showdown-db.USERNAME}
+      - key: PGPASSWORD
+        value: ${showdown-db.PASSWORD}
+      - key: PGSSLMODE
+        value: verify-full
+      # Written to a file at startup by pipelines.db, since libpq reads the certificate only from a file.
+      - key: DATABASE_CA_CERT
+        value: ${showdown-db.CA_CERT}
+      - key: DBT_USER
+        value: showdown-transform
+      - key: DBT_PASSWORD
+        type: SECRET # set in the control panel
+alerts:
+  - rule: JOB_INVOCATION_FAILED # email when a run exits non-zero
+  - rule: DEPLOYMENT_FAILED # email when a build or deploy fails
