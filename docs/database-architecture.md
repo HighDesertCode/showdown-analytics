@@ -285,11 +285,11 @@ Row counts below are for September 2026.
 | `matchup_chart_cell` | 648 | Weighted wins and win percent for each of the 18 × 18 type pairings; mirror matches show 0% |
 | `matchup_chart_viability` | 36 | Smogon's ViabilityScore per type, a published score rather than a win rate |
 
-`ingestion_run` logs each `load-smogon` run: when it started and finished, its status (`running`, `succeeded`, `partial` when some downloads failed, or `failed` with the error), and how many files it loaded, skipped, and failed. The run updates its own row as it goes, the only update the loader can make, so a run killed partway through stays `running` and shows how far it got.
+`ingestion_run` logs each load: when it started and finished, its status (`running`, `succeeded`, `partial` when some downloads failed, or `failed` with the error), and how many files it loaded, skipped, and failed. The run updates its own row as it goes, the only update the loader can make, so a run killed partway through stays `running` and shows how far it got.
 
 ## Published Statistics
 
-The `staging` and `api` schemas are built with [dbt](https://www.getdbt.com/) from `raw` and `reference` after each monthly load:
+The `staging` and `api` schemas are built with [dbt](https://www.getdbt.com/) from `raw` and `reference` after each monthly load. A scheduled job checks daily for the previous month, loads it once Smogon publishes it, and then runs the build:
 
 - **`staging`** holds views that clean each raw table once: they keep only the latest version of each file, match Smogon's names to `reference` IDs, and flag placeholders such as empty move slots. Tests check that every name matches, nothing is duplicated, and every loaded month and baseline has all 77 files.
 - **`api`** holds the published statistics as tables and the reference data as views. Each model has a contract that fixes its column names, types, and constraints, so a change in Smogon's data fails the build rather than changing what clients see.
