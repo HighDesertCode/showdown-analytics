@@ -15,5 +15,13 @@ ALTER DEFAULT PRIVILEGES FOR ROLE doadmin IN SCHEMA raw
 GRANT UPDATE (finished_at, status, files_loaded, files_skipped, files_failed, error)
     ON raw.ingestion_run TO "showdown-analyst";
 
--- Every role can connect to every database by default; keep project roles out of defaultdb.
+-- Every role can connect to every database, and create temporary tables in it, by default. Keep project roles
+-- out of defaultdb, and let only the project's roles into this one. Run while connected to showdown-database;
+-- current_database() names it, since the tests run these files against a database with another name.
 REVOKE CONNECT ON DATABASE defaultdb FROM PUBLIC;
+DO $$
+BEGIN
+    EXECUTE FORMAT('REVOKE CONNECT, TEMPORARY ON DATABASE %I FROM PUBLIC', CURRENT_DATABASE());
+    EXECUTE FORMAT('GRANT CONNECT ON DATABASE %I TO "showdown-analyst"', CURRENT_DATABASE());
+END
+$$;

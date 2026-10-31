@@ -68,7 +68,8 @@ def schemas(database_url: str) -> None:
         for role in ROLES:
             if role not in existing:
                 conn.execute(sql.SQL("CREATE ROLE {}").format(sql.Identifier(role)))
-        conn.execute(sql.SQL("GRANT CREATE ON DATABASE {} TO doadmin").format(sql.Identifier(conn.info.dbname)))
+        # doadmin owns the database, as in production, so the permission files can grant and revoke CONNECT on it.
+        conn.execute(sql.SQL("ALTER DATABASE {} OWNER TO doadmin").format(sql.Identifier(conn.info.dbname)))
         # showdown_analyst.sql revokes CONNECT on defaultdb, so it has to exist.
         if conn.execute("SELECT 1 FROM pg_database WHERE datname = 'defaultdb'").fetchone() is None:
             conn.execute("CREATE DATABASE defaultdb")

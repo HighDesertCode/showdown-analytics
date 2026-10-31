@@ -36,7 +36,8 @@ def main() -> None:
             conn.execute(
                 sql.SQL("CREATE ROLE {} LOGIN PASSWORD {}").format(sql.Identifier(role), sql.Literal(password))
             )
-        conn.execute(sql.SQL("GRANT CREATE ON DATABASE {} TO doadmin").format(sql.Identifier(database)))
+        # doadmin owns the database, as in production, so the permission files can grant and revoke CONNECT on it.
+        conn.execute(sql.SQL("ALTER DATABASE {} OWNER TO doadmin").format(sql.Identifier(database)))
         # showdown_analyst.sql revokes CONNECT on defaultdb, so it has to exist.
         conn.execute("CREATE DATABASE defaultdb OWNER doadmin")
 
