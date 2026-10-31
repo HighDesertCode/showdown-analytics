@@ -1,7 +1,7 @@
 """Parses a Pokémon Showdown battle log into the facts it states about the battle, its players, and their teams.
 
 A log is one protocol message per line, `|type|arg|arg...`. Every line type must be known: header types are read
-here, game event types are left for the event parser, and chat and display types are skipped. Anything else raises
+here, game event types by pipelines.battle_events, and chat and display types are skipped. Anything else raises
 ReplayFormatError, so a protocol change is noticed rather than silently dropped.
 """
 
@@ -10,6 +10,8 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from pipelines import battle_events
+from pipelines.battle_events import Event
 from pipelines.replays import ReplayFormatError
 
 # Lines that describe the battle as a whole.
@@ -63,10 +65,12 @@ class Battle:
     rules: tuple[str, ...]
     sides: tuple[Side, Side]
     team: tuple[PreviewPokemon, ...]
+    events: tuple[Event, ...]
 
 
 def parse(log: str, replay_id: str) -> Battle:
-    lines = [line.split("|")[1:] for line in log.splitlines() if line]
+    raw_lines = [line for line in log.splitlines() if line]
+    lines = [line.split("|")[1:] for line in raw_lines]
     players: dict[str, str] = {}
     player_elo: dict[str, int | None] = {}
     rating_changes: dict[str, tuple[int, int]] = {}
@@ -130,6 +134,12 @@ def parse(log: str, replay_id: str) -> Battle:
         if side in team_size and len(preview[side]) != team_size[side]:
             raise ReplayFormatError(f"{replay_id} previews {len(preview[side])} Pokémon for {side}")
 
+    team = tuple(
+        PreviewPokemon(side, slot, species, _nickname(lines, side, species, preview[side]))
+        for side in SIDES
+        for slot, species in enumerate(preview[side], start=1)
+    )
+    nicknames = {(pokemon.side, pokemon.nickname): pokemon.species for pokemon in team if pokemon.nickname}
     return Battle(
         replay_id=replay_id,
         rated=rated,
@@ -143,11 +153,8 @@ def parse(log: str, replay_id: str) -> Battle:
             _side_result("p1", players, player_elo, rating_changes, winner),
             _side_result("p2", players, player_elo, rating_changes, winner),
         ),
-        team=tuple(
-            PreviewPokemon(side, slot, species, _nickname(lines, side, species, preview[side]))
-            for side in SIDES
-            for slot, species in enumerate(preview[side], start=1)
-        ),
+        team=team,
+        events=battle_events.parse(raw_lines, nicknames, replay_id, EVENT_TYPES),
     )
 
 

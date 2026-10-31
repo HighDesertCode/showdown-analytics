@@ -499,6 +499,8 @@ def fake_parse_replays(monkeypatch, logs: dict[str, str]):
 
     monkeypatch.setattr(cli.db, "connect", lambda: conn)
     monkeypatch.setattr(cli.battle, "unparsed_ids", lambda conn: list(logs))
+    monkeypatch.setattr(cli.battle, "all_ids", lambda conn: ["gen9monotype-0", *logs])
+    monkeypatch.setattr(cli.battle, "delete", lambda conn, replay_id: inserted.append(("delete", replay_id)))
     monkeypatch.setattr(cli.battle, "log", lambda conn, replay_id: logs[replay_id])
     monkeypatch.setattr(cli.battle, "insert", lambda conn, battle, parsed_at: inserted.append(battle))
     monkeypatch.setattr(cli.battle_log, "parse", parse)
@@ -528,11 +530,26 @@ def test_parse_replays_continues_past_replays_it_rejects(monkeypatch, capsys):
     )
 
 
-def test_parse_replays_command(monkeypatch):
+def test_parse_replays_reparse_replaces_every_battle_it_can_parse(monkeypatch, capsys):
+    logs = {"gen9monotype-0": "ok", "gen9monotype-1": "bad", "gen9monotype-2": "ok"}
+    conn, inserted = fake_parse_replays(monkeypatch, logs)
+    monkeypatch.setattr(cli.battle, "all_ids", lambda conn: list(logs))
+
+    with pytest.raises(SystemExit):
+        cli.parse_replays(reparse=True)
+
+    # The rejected replay keeps its earlier parse: nothing is deleted for it.
+    assert inserted == [("delete", "gen9monotype-0"), "gen9monotype-0", ("delete", "gen9monotype-2"), "gen9monotype-2"]
+    assert conn.commits == 2
+    assert capsys.readouterr().out.startswith("3 replays to re-parse\n")
+
+
+@pytest.mark.parametrize(("arguments", "reparse"), [([], False), (["--reparse"], True)])
+def test_parse_replays_command(monkeypatch, arguments, reparse):
     calls = []
-    monkeypatch.setattr(cli, "parse_replays", lambda: calls.append("parse"))
-    monkeypatch.setattr("sys.argv", ["pipelines", "parse-replays"])
+    monkeypatch.setattr(cli, "parse_replays", calls.append)
+    monkeypatch.setattr("sys.argv", ["pipelines", "parse-replays", *arguments])
 
     cli.main()
 
-    assert calls == ["parse"]
+    assert calls == [reparse]

@@ -148,7 +148,11 @@ def test_a_leaving_player_keeps_their_name():
     [("Terapagos", "Terapagos-Terastal"), ("Mimikyu", "Mimikyu-Busted"), ("Urshifu-*", "Urshifu")],
 )
 def test_nicknames_match_pokemon_that_enter_in_another_form(previewed, entered):
-    log = HEADER.replace("|poke|p1|Gengar, M|", f"|poke|p1|{previewed}|").replace(
+    # The second previewed Pokémon becomes Gengar, so the team has only one Pokémon of each species.
+    log = HEADER.replace("|poke|p1|Urshifu-*, F|", "|poke|p1|Gengar, M|").replace(
+        "|switch|p1a: Fist|Urshifu-Rapid-Strike, F|", "|switch|p1a: Fist|Gengar, M|"
+    )
+    log = log.replace("|poke|p1|Gengar, M|", f"|poke|p1|{previewed}|", 1).replace(
         "|switch|p1a: Ghostly|Gengar, M|", f"|switch|p1a: Ghostly|{entered}|"
     )
 
@@ -165,6 +169,7 @@ def test_a_different_species_is_not_taken_for_a_form():
     log = log.replace("|switch|p1a: Ghostly|Gengar, M|", "|switch|p1a: Zed|Porygon-Z|").replace(
         "|switch|p1a: Fist|Urshifu-Rapid-Strike, F|", "|switch|p1a: Pory|Porygon|"
     )
+    log = log.replace("p1a: Ghostly", "p1a: Zed")
 
     battle = parse(log + ENDING)
 

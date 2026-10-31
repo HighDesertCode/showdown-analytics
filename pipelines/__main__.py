@@ -200,15 +200,16 @@ def collect_replays(start: date | None, end: date | None) -> None:
         raise SystemExit(1)
 
 
-def parse_replays() -> None:
-    """Parses every stored replay that has no parsed battle yet, committing each battle separately.
+def parse_replays(reparse: bool = False) -> None:
+    """Parses every stored replay that has no parsed battle yet, or with `reparse`, every stored replay again.
 
-    A replay the parser rejects is listed at the end and stays unparsed, so the command exits with status 1; once the
-    parser handles it, a rerun parses it.
+    Each battle is parsed, and with `reparse` its old parse deleted, then inserted and committed on its own, so a
+    battle never mixes two parses. A replay the parser rejects keeps its old parse (or stays unparsed) and is listed
+    at the end, and the command exits with status 1; once the parser handles it, a rerun parses it.
     """
     with db.connect() as conn:
-        replay_ids = battle.unparsed_ids(conn)
-        print(f"{len(replay_ids)} replays to parse")
+        replay_ids = battle.all_ids(conn) if reparse else battle.unparsed_ids(conn)
+        print(f"{len(replay_ids)} replays to {'re-parse' if reparse else 'parse'}")
         failed: list[tuple[str, Exception]] = []
         for replay_id in replay_ids:
             try:
@@ -216,6 +217,8 @@ def parse_replays() -> None:
             except replays.ReplayFormatError as error:
                 failed.append((replay_id, error))
                 continue
+            if reparse:
+                battle.delete(conn, replay_id)
             battle.insert(conn, parsed, datetime.now(UTC))
             conn.commit()
     print(f"{len(replay_ids) - len(failed)} parsed, {len(failed)} failed")
@@ -248,7 +251,10 @@ def main() -> None:
     )
     collect_parser.add_argument("--start", type=date.fromisoformat, help="first upload day (UTC), e.g. 2026-03-01")
     collect_parser.add_argument("--end", type=date.fromisoformat, help="last upload day (UTC), included")
-    commands.add_parser("parse-replays", help="parse stored replays that haven't been parsed yet")
+    parse_parser = commands.add_parser("parse-replays", help="parse stored replays that haven't been parsed yet")
+    parse_parser.add_argument(
+        "--reparse", action="store_true", help="parse every stored replay again, replacing its earlier parse"
+    )
     args = parser.parse_args()
     if args.command == "collect-replays":
         if (args.start is None) != (args.end is None):
@@ -268,7 +274,7 @@ def main() -> None:
     elif args.command == "collect-replays":
         collect_replays(args.start, args.end)
     elif args.command == "parse-replays":
-        parse_replays()
+        parse_replays(args.reparse)
 
 
 if __name__ == "__main__":
