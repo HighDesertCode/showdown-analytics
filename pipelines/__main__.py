@@ -153,6 +153,7 @@ def main() -> None:
         "update-smogon", help="load last month's Smogon reports if published and not yet loaded, then run dbt"
     )
     args = parser.parse_args()
+    db.use_ca_cert_from_environment()
 
     if args.command == "check-connection":
         check_connection()
