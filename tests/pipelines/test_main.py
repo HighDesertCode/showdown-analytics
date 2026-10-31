@@ -485,3 +485,54 @@ def test_collect_replays_command_rejects_bad_windows(monkeypatch, arguments):
         cli.main()
 
     assert exit_info.value.code == 2
+
+
+def fake_parse_replays(monkeypatch, logs: dict[str, str]):
+    """Fakes parse_replays's database and parser; returns the connection and the battles inserted."""
+    conn = FakeConnection()
+    inserted = []
+
+    def parse(log, replay_id):
+        if log == "bad":
+            raise ReplayFormatError(f"{replay_id} has an unknown line type '-newline'")
+        return replay_id
+
+    monkeypatch.setattr(cli.db, "connect", lambda: conn)
+    monkeypatch.setattr(cli.battle, "unparsed_ids", lambda conn: list(logs))
+    monkeypatch.setattr(cli.battle, "log", lambda conn, replay_id: logs[replay_id])
+    monkeypatch.setattr(cli.battle, "insert", lambda conn, battle, parsed_at: inserted.append(battle))
+    monkeypatch.setattr(cli.battle_log, "parse", parse)
+    return conn, inserted
+
+
+def test_parse_replays_commits_each_battle(monkeypatch, capsys):
+    conn, inserted = fake_parse_replays(monkeypatch, {"gen9monotype-1": "ok", "gen9monotype-2": "ok"})
+
+    cli.parse_replays()
+
+    assert inserted == ["gen9monotype-1", "gen9monotype-2"]
+    assert conn.commits == 2
+    assert capsys.readouterr().out == "2 replays to parse\n2 parsed, 0 failed\n"
+
+
+def test_parse_replays_continues_past_replays_it_rejects(monkeypatch, capsys):
+    conn, inserted = fake_parse_replays(monkeypatch, {"gen9monotype-1": "bad", "gen9monotype-2": "ok"})
+
+    with pytest.raises(SystemExit) as exit_info:
+        cli.parse_replays()
+
+    assert exit_info.value.code == 1
+    assert inserted == ["gen9monotype-2"]
+    assert capsys.readouterr().err == (
+        "\n1 replays couldn't be parsed:\n  gen9monotype-1: gen9monotype-1 has an unknown line type '-newline'\n"
+    )
+
+
+def test_parse_replays_command(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "parse_replays", lambda: calls.append("parse"))
+    monkeypatch.setattr("sys.argv", ["pipelines", "parse-replays"])
+
+    cli.main()
+
+    assert calls == ["parse"]
