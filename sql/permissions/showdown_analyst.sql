@@ -11,9 +11,12 @@ GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA raw TO "showdown-analyst";
 ALTER DEFAULT PRIVILEGES FOR ROLE doadmin IN SCHEMA raw
     GRANT SELECT, INSERT ON TABLES TO "showdown-analyst";
 
--- The one exception to insert-only: a run updates its own progress and result. Smogon data stays immutable.
+-- The one exception to insert-only: a run updates its own progress and result. Smogon data and replays stay
+-- immutable.
 GRANT UPDATE (finished_at, status, files_loaded, files_skipped, files_failed, error)
     ON raw.ingestion_run TO "showdown-analyst";
+GRANT UPDATE (finished_at, status, replays_loaded, replays_failed, error)
+    ON raw.replay_collection_run TO "showdown-analyst";
 
 -- Every role can connect to every database, and create temporary tables in it, by default. Keep project roles
 -- out of defaultdb, and let only the project's roles into this one. Run while connected to showdown-database;

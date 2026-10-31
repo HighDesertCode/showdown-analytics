@@ -295,6 +295,8 @@ Public Gen 9 Monotype replays from Pokémon Showdown are stored in `raw` as publ
 | --- | --- |
 | `replay` | One row per replay: its ID, format, players, published rating, upload time, and full battle log. Rows are never changed, so a replay its uploader later deletes is kept. |
 
+`replay_collection_run` logs each collection run the same way `ingestion_run` logs Smogon loads: its status, and how many replays it loaded and failed to download.
+
 ## Published Statistics
 
 The `staging` and `api` schemas are built with [dbt](https://www.getdbt.com/) from `raw` and `reference` after each monthly load. A scheduled job checks daily for the previous month, loads it once Smogon publishes it, and then runs the build:

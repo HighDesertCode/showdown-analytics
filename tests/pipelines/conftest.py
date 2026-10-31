@@ -44,6 +44,7 @@ SQL_FILES = [
     "create/raw/ingestion_run.sql",
     "create/raw/replay.sql",
     "index/raw/replay.sql",
+    "create/raw/replay_collection_run.sql",
     "create/staging/schema.sql",
     "create/api/schema.sql",
 ]
