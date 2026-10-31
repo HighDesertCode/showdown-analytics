@@ -7,6 +7,7 @@ import pytest
 
 from pipelines import __main__ as cli
 from pipelines.raw.common import ReportFormatError
+from pipelines.replays import ReplayFormatError, SearchResult
 
 
 class FakeConnection:
@@ -306,3 +307,181 @@ def test_update_smogon_command_uses_todays_utc_date(monkeypatch):
     cli.main()
 
     assert calls == [datetime.now(UTC).date()]
+
+
+class FakeReplayCollectionRun:
+    """Records the calls collect_replays makes to pipelines.raw.replay_collection_run."""
+
+    def __init__(self):
+        self.calls = []
+
+    def start(self, conn, format_id):
+        self.calls.append(("start", format_id))
+        return 3
+
+    def record_replay(self, conn, run_id, outcome):
+        self.calls.append(("record_replay", run_id, outcome))
+
+    def finish(self, conn, run_id, status, error=None):
+        self.calls.append(("finish", run_id, status, error, conn.rollbacks))
+
+
+def found(number: int, uploaded_at: datetime) -> SearchResult:
+    return SearchResult(f"gen9monotype-{number}", uploaded_at)
+
+
+# Newest first, as search returns them.
+FOUND = [
+    found(3, datetime(2026, 3, 5, 23, 0, tzinfo=UTC)),
+    SearchResult("rom-gen9monotype-9", datetime(2026, 3, 4, tzinfo=UTC), "rom"),
+    found(2, datetime(2026, 3, 3, tzinfo=UTC)),
+    found(1, datetime(2026, 3, 1, tzinfo=UTC)),
+]
+
+
+def fake_collect_replays(monkeypatch, stored=(), newest=None, fetch=None, search=None):
+    """Fakes collect_replays's database, search, and downloads; returns the connection, run log, and calls made."""
+    conn = FakeConnection()
+    run = FakeReplayCollectionRun()
+    calls = []
+
+    def default_search(format_id, start, end):
+        calls.append(("search", format_id, start, end))
+        return iter(FOUND)
+
+    def fetch_replay(replay_id):
+        calls.append(("fetch", replay_id))
+        if fetch:
+            fetch(replay_id)
+        return replay_id
+
+    monkeypatch.setattr(cli.db, "connect", lambda: conn)
+    monkeypatch.setattr(cli, "replay_collection_run", run)
+    monkeypatch.setattr(cli.replay, "newest_upload", lambda conn, format_id: newest)
+    monkeypatch.setattr(cli.replay, "stored_ids", lambda conn, ids: {i for i in ids if i in stored})
+    monkeypatch.setattr(cli.replay, "insert", lambda conn, replay, retrieved_at: calls.append(("insert", replay)))
+    monkeypatch.setattr(cli.replays, "search", search or default_search)
+    monkeypatch.setattr(cli.replays, "fetch_replay", fetch_replay)
+    return conn, run, calls
+
+
+def test_collect_replays_downloads_a_window_oldest_first(monkeypatch, capsys):
+    conn, run, calls = fake_collect_replays(monkeypatch, stored={"gen9monotype-2"})
+
+    cli.collect_replays(date(2026, 3, 1), date(2026, 3, 5))
+
+    assert calls == [
+        ("search", "gen9monotype", datetime(2026, 3, 1, tzinfo=UTC), datetime(2026, 3, 6, tzinfo=UTC)),
+        ("fetch", "gen9monotype-1"),
+        ("insert", "gen9monotype-1"),
+        ("fetch", "gen9monotype-3"),
+        ("insert", "gen9monotype-3"),
+    ]
+    assert run.calls == [
+        ("start", "gen9monotype"),
+        ("record_replay", 3, "loaded"),
+        ("record_replay", 3, "loaded"),
+        ("finish", 3, "succeeded", None, 0),
+    ]
+    assert conn.commits == 4
+    output = capsys.readouterr().out
+    assert output.startswith(
+        "Collecting gen9monotype replays uploaded from 2026-03-01 00:00:00 to 2026-03-06 00:00:00 UTC\n"
+        "4 found, 1 from other servers skipped, 1 already stored, 2 to download\n"
+    )
+    assert output.endswith("2 loaded, 0 failed\n")
+
+
+def test_collect_replays_without_a_window_resumes_from_the_newest_stored(monkeypatch, capsys):
+    newest = datetime(2026, 3, 1, tzinfo=UTC)
+    _, _, calls = fake_collect_replays(monkeypatch, stored={"gen9monotype-1"}, newest=newest)
+
+    cli.collect_replays(None, None)
+
+    assert calls[0] == ("search", "gen9monotype", newest, None)
+    assert "to now UTC" in capsys.readouterr().out
+
+
+def test_collect_replays_needs_a_window_for_the_first_load(monkeypatch):
+    _, run, calls = fake_collect_replays(monkeypatch)
+
+    with pytest.raises(RuntimeError, match="pass --start and --end"):
+        cli.collect_replays(None, None)
+
+    assert calls == []
+    assert run.calls == []
+
+
+def test_collect_replays_continues_past_failed_downloads(monkeypatch, capsys):
+    def fetch(replay_id):
+        if replay_id == "gen9monotype-2":
+            raise ReplayFormatError("gen9monotype-2 is not public")
+
+    conn, run, calls = fake_collect_replays(monkeypatch, fetch=fetch)
+
+    with pytest.raises(SystemExit) as exit_info:
+        cli.collect_replays(date(2026, 3, 1), date(2026, 3, 5))
+
+    assert exit_info.value.code == 1
+    assert [call for call in calls if call[0] == "insert"] == [
+        ("insert", "gen9monotype-1"),
+        ("insert", "gen9monotype-3"),
+    ]
+    assert run.calls[1:] == [
+        ("record_replay", 3, "loaded"),
+        ("record_replay", 3, "failed"),
+        ("record_replay", 3, "loaded"),
+        ("finish", 3, "partial", None, 0),
+    ]
+    assert capsys.readouterr().err == (
+        "\n1 replays failed; collect their window again to retry them:\n"
+        "  gen9monotype-2: gen9monotype-2 is not public\n"
+    )
+
+
+def test_collect_replays_records_a_failed_search(monkeypatch):
+    def search(format_id, start, end):
+        raise urllib.error.HTTPError("https://replay.pokemonshowdown.com", 503, "Unavailable", Message(), None)
+
+    conn, run, _ = fake_collect_replays(monkeypatch, search=search)
+
+    with pytest.raises(urllib.error.HTTPError):
+        cli.collect_replays(date(2026, 3, 1), date(2026, 3, 5))
+
+    assert run.calls[1:] == [("finish", 3, "failed", "HTTPError: HTTP Error 503: Unavailable", 1)]
+
+
+@pytest.mark.parametrize(
+    ("arguments", "window"),
+    [
+        ([], (None, None)),
+        (["--start", "2026-03-01", "--end", "2026-03-05"], (date(2026, 3, 1), date(2026, 3, 5))),
+        (["--start", "2026-03-01", "--end", "2026-03-01"], (date(2026, 3, 1), date(2026, 3, 1))),
+    ],
+)
+def test_collect_replays_command(monkeypatch, arguments, window):
+    calls = []
+    monkeypatch.setattr(cli, "collect_replays", lambda start, end: calls.append((start, end)))
+    monkeypatch.setattr("sys.argv", ["pipelines", "collect-replays", *arguments])
+
+    cli.main()
+
+    assert calls == [window]
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["--start", "2026-03-01"],
+        ["--end", "2026-03-05"],
+        ["--start", "2026-03-05", "--end", "2026-03-01"],
+        ["--start", "March 1", "--end", "2026-03-05"],
+    ],
+)
+def test_collect_replays_command_rejects_bad_windows(monkeypatch, arguments):
+    monkeypatch.setattr("sys.argv", ["pipelines", "collect-replays", *arguments])
+
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main()
+
+    assert exit_info.value.code == 2

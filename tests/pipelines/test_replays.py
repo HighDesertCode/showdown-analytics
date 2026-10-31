@@ -65,21 +65,32 @@ def test_search_pages_back_from_the_oldest_upload_plus_one_second(monkeypatch, w
         {replays.search_url("gen9monotype"): first, replays.search_url("gen9monotype", 1951): second},
     )
 
-    results = list(replays.search("gen9monotype", since=datetime.fromtimestamp(0, UTC)))
+    results = list(replays.search("gen9monotype", start=datetime.fromtimestamp(0, UTC)))
 
     assert requested == [replays.search_url("gen9monotype"), replays.search_url("gen9monotype", 1951)]
     assert [r.replay_id for r in results] == [f"gen9monotype-{n}" for n in range(1000, 947, -1)]
     assert waits == [replays.REQUEST_GAP, replays.REQUEST_GAP]
 
 
-def test_search_stops_at_since_without_reading_more_pages(monkeypatch, waits):
+def test_search_stops_at_start_without_reading_more_pages(monkeypatch, waits):
     page = [entry(1000 - n, 2000 - n) for n in range(replays.PAGE_SIZE)]
     requested = serve(monkeypatch, {replays.search_url("gen9monotype"): page})
 
-    results = list(replays.search("gen9monotype", since=datetime.fromtimestamp(1998, UTC)))
+    results = list(replays.search("gen9monotype", start=datetime.fromtimestamp(1998, UTC)))
 
     assert results == [result(1000, 2000), result(999, 1999), result(998, 1998)]
     assert len(requested) == 1
+
+
+def test_search_starts_paging_at_the_end(monkeypatch, waits):
+    page = [entry(1000, 1999), entry(999, 1998)]
+    requested = serve(monkeypatch, {replays.search_url("gen9monotype", 2000): page})
+
+    end = datetime.fromtimestamp(2000, UTC)
+    results = list(replays.search("gen9monotype", start=datetime.fromtimestamp(0, UTC), end=end))
+
+    assert results == [result(1000, 1999), result(999, 1998)]
+    assert requested == [replays.search_url("gen9monotype", 2000)]
 
 
 def test_search_stops_when_a_full_page_has_nothing_new(monkeypatch, waits):
@@ -90,16 +101,26 @@ def test_search_stops_when_a_full_page_has_nothing_new(monkeypatch, waits):
         {replays.search_url("gen9monotype"): page, replays.search_url("gen9monotype", 2001): page},
     )
 
-    results = list(replays.search("gen9monotype", since=datetime.fromtimestamp(0, UTC)))
+    results = list(replays.search("gen9monotype", start=datetime.fromtimestamp(0, UTC)))
 
     assert len(results) == replays.PAGE_SIZE
     assert len(requested) == 2
+
+
+def test_parse_search_marks_side_server_replays():
+    page = [entry(2, 2000), {"id": "smogtours-gen9monotype-1", "uploadtime": 1999}]
+
+    assert replays.parse_search(json.dumps(page).encode()) == [
+        result(2, 2000),
+        SearchResult("smogtours-gen9monotype-1", datetime.fromtimestamp(1999, UTC), "smogtours"),
+    ]
 
 
 @pytest.mark.parametrize(
     "page",
     [
         {"id": "gen9monotype-1"},
+        ["gen9monotype-1"],
         [{"uploadtime": 2000}],
         [{"id": "../secret", "uploadtime": 2000}],
         [{"id": "gen9monotype-1", "uploadtime": "2000"}],

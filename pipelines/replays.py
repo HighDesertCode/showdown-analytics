@@ -5,6 +5,7 @@ starts before an upload time (in Unix seconds). Each replay's JSON at /{id}.json
 """
 
 import json
+import math
 import re
 import time
 import urllib.parse
@@ -19,7 +20,9 @@ FORMAT_ID = "gen9monotype"
 PAGE_SIZE = 51
 # Seconds between requests, to keep the load on Showdown's replay server modest.
 REQUEST_GAP = 1.0
+# A main-server replay is "<format>-<number>"; side servers prefix their own name (e.g. "smogtours-").
 REPLAY_ID = re.compile(r"^[a-z0-9]+-[0-9]+$")
+SIDE_SERVER_REPLAY_ID = re.compile(r"^([a-z0-9]+)-[a-z0-9]+-[0-9]+$")
 FORMAT_ID_PATTERN = re.compile(r"^[a-z0-9]+$")
 
 
@@ -31,6 +34,7 @@ class ReplayFormatError(ValueError):
 class SearchResult:
     replay_id: str
     uploaded_at: datetime
+    server: str | None = None  # The side server it was played on, or None for Showdown's main server.
 
 
 @dataclass(frozen=True)
@@ -55,19 +59,20 @@ def replay_url(replay_id: str) -> str:
     return f"{REPLAY_URL}/{replay_id}.json"
 
 
-def search(format_id: str, since: datetime) -> Iterator[SearchResult]:
-    """Yields the public replays uploaded at or after `since`, newest first, reading only the pages it needs.
+def search(format_id: str, start: datetime, end: datetime | None = None) -> Iterator[SearchResult]:
+    """Yields the public replays uploaded at or after `start` and before `end` (or now), newest first, reading only
+    the pages it needs.
 
     Each later page starts one second after the previous page's oldest upload, so replays uploaded in the same second
     as a page boundary aren't missed; replays already yielded are skipped.
     """
     seen: set[str] = set()
-    before = None
+    before = None if end is None else math.ceil(end.timestamp())
     while True:
         page = parse_search(_fetch(search_url(format_id, before)))
         new = [result for result in page if result.replay_id not in seen]
         for result in new:
-            if result.uploaded_at < since:
+            if result.uploaded_at < start:
                 return
             seen.add(result.replay_id)
             yield result
@@ -85,7 +90,7 @@ def parse_search(body: bytes) -> list[SearchResult]:
     page = _json(body)
     if not isinstance(page, list):
         raise ReplayFormatError("Search page is not a list")
-    return [SearchResult(_replay_id(entry), _uploaded_at(entry)) for entry in page]
+    return [_search_result(entry) for entry in page]
 
 
 def parse_replay(body: bytes, replay_id: str) -> Replay:
@@ -121,6 +126,17 @@ def _json(body: bytes) -> object:
         return json.loads(body)
     except ValueError as error:  # Also covers bytes that aren't UTF-8.
         raise ReplayFormatError(f"Response is not JSON: {error}") from error
+
+
+def _search_result(entry: object) -> SearchResult:
+    """Search lists side-server replays too, so their IDs are accepted here and marked with the server."""
+    if not isinstance(entry, dict):
+        raise ReplayFormatError(f"Unexpected search result {entry!r}")
+    replay_id = entry.get("id")
+    side_server = SIDE_SERVER_REPLAY_ID.match(replay_id) if isinstance(replay_id, str) else None
+    if side_server:
+        return SearchResult(side_server.string, _uploaded_at(entry), side_server.group(1))
+    return SearchResult(_replay_id(entry), _uploaded_at(entry))
 
 
 def _replay_id(entry: object) -> str:

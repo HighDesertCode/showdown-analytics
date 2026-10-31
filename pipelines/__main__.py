@@ -4,12 +4,12 @@ import argparse
 import shutil
 import subprocess
 import sys
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 
 from psycopg import Connection
 
-from pipelines import db, download, showdown, smogon
-from pipelines.raw import ingestion_run, source_file
+from pipelines import db, download, replays, showdown, smogon
+from pipelines.raw import ingestion_run, replay, replay_collection_run, source_file
 from pipelines.raw.load import load_file
 from pipelines.reference.common import existing_ids
 from pipelines.reference.load import load_all
@@ -136,6 +136,70 @@ def run_dbt(*arguments: str) -> None:
         raise SystemExit(result.returncode)
 
 
+def collect_replays(start: date | None, end: date | None) -> None:
+    """Stores the public replays uploaded from `start` through `end` (UTC days), or, with no window, those uploaded
+    since the newest one already stored.
+
+    Every search page is read first, then replays are downloaded oldest first and committed one at a time, so a
+    killed run never leaves a gap below the newest stored replay, where the next run resumes.
+    """
+    format_id = replays.FORMAT_ID
+    with db.connect() as conn:
+        if start is None or end is None:
+            since = replay.newest_upload(conn, format_id)
+            if since is None:
+                raise RuntimeError("raw.replay is empty; pass --start and --end for the first load")
+            until = None
+        else:
+            since = datetime.combine(start, time(), UTC)
+            until = datetime.combine(end + timedelta(days=1), time(), UTC)
+        print(
+            f"Collecting {format_id} replays uploaded from {since:%Y-%m-%d %H:%M:%S} to "
+            f"{'now' if until is None else f'{until:%Y-%m-%d %H:%M:%S}'} UTC"
+        )
+        failed: list[tuple[str, Exception]] = []
+        run_id = replay_collection_run.start(conn, format_id)
+        conn.commit()
+        try:
+            found = list(replays.search(format_id, since, until))
+            # Side servers have their own ratings and players (including bots), so only the main server's are kept.
+            main_server = [result for result in found if result.server is None]
+            stored = replay.stored_ids(conn, [result.replay_id for result in main_server])
+            new = [result for result in reversed(main_server) if result.replay_id not in stored]
+            print(
+                f"{len(found)} found, {len(found) - len(main_server)} from other servers skipped, "
+                f"{len(main_server) - len(new)} already stored, {len(new)} to download"
+            )
+            for result in new:
+                try:
+                    downloaded = replays.fetch_replay(result.replay_id)
+                except (*download.NETWORK_ERRORS, replays.ReplayFormatError) as error:
+                    # Nothing was inserted, so there is nothing to roll back; a run over the same window retries it.
+                    failed.append((result.replay_id, error))
+                    replay_collection_run.record_replay(conn, run_id, "failed")
+                    conn.commit()
+                    print(f"{result.replay_id}  {result.uploaded_at:%Y-%m-%d %H:%M:%S}  failed ({error})")
+                    continue
+                # The run's count commits with the replay, so its progress is exact even if the run is killed.
+                replay.insert(conn, downloaded, datetime.now(UTC))
+                replay_collection_run.record_replay(conn, run_id, "loaded")
+                conn.commit()
+                print(f"{result.replay_id}  {result.uploaded_at:%Y-%m-%d %H:%M:%S}  loaded")
+        except Exception as error:
+            conn.rollback()
+            replay_collection_run.finish(conn, run_id, "failed", f"{type(error).__name__}: {error}")
+            conn.commit()
+            raise
+        replay_collection_run.finish(conn, run_id, "partial" if failed else "succeeded")
+        conn.commit()
+    print(f"{len(new) - len(failed)} loaded, {len(failed)} failed")
+    if failed:
+        print(f"\n{len(failed)} replays failed; collect their window again to retry them:", file=sys.stderr)
+        for replay_id, error in failed:
+            print(f"  {replay_id}: {error}", file=sys.stderr)
+        raise SystemExit(1)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="pipelines")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -152,7 +216,18 @@ def main() -> None:
     commands.add_parser(
         "update-smogon", help="load last month's Smogon reports if published and not yet loaded, then run dbt"
     )
+    collect_parser = commands.add_parser(
+        "collect-replays",
+        help="store public Monotype replays uploaded in a window, or since the newest stored one",
+    )
+    collect_parser.add_argument("--start", type=date.fromisoformat, help="first upload day (UTC), e.g. 2026-03-01")
+    collect_parser.add_argument("--end", type=date.fromisoformat, help="last upload day (UTC), included")
     args = parser.parse_args()
+    if args.command == "collect-replays":
+        if (args.start is None) != (args.end is None):
+            collect_parser.error("--start and --end go together")
+        if args.start is not None and args.start > args.end:
+            collect_parser.error("--start is after --end")
     db.use_ca_cert_from_environment()
 
     if args.command == "check-connection":
@@ -163,6 +238,8 @@ def main() -> None:
         load_smogon(args.month, args.family or list(smogon.FAMILIES))
     elif args.command == "update-smogon":
         update_smogon(datetime.now(UTC).date())
+    elif args.command == "collect-replays":
+        collect_replays(args.start, args.end)
 
 
 if __name__ == "__main__":
