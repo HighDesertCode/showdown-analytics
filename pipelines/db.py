@@ -5,6 +5,7 @@ loaded from .env by `uv run --env-file .env`. Connections to any database that i
 PGSSLMODE=verify-full, so the server's certificate and hostname are always checked; libpq's default doesn't.
 """
 
+import atexit
 import os
 import tempfile
 from pathlib import Path
@@ -41,6 +42,10 @@ def use_ca_cert_from_environment() -> None:
         raise RuntimeError(f"Set {CA_CERT_SETTING} or PGSSLROOTCERT, not both")
     if not pem.lstrip().startswith("-----BEGIN CERTIFICATE-----"):
         raise RuntimeError(f"{CA_CERT_SETTING} doesn't hold a PEM certificate")
-    path = Path(tempfile.gettempdir()) / "database-ca.crt"
-    path.write_text(pem)
-    os.environ["PGSSLROOTCERT"] = str(path)
+    # A new file only this user can read, so commands running at once never share or replace a certificate. It
+    # lasts until this command exits, after any dbt run it started has finished.
+    fd, path = tempfile.mkstemp(prefix="database-ca-", suffix=".crt")
+    with os.fdopen(fd, "w") as file:
+        file.write(pem)
+    atexit.register(Path(path).unlink, missing_ok=True)
+    os.environ["PGSSLROOTCERT"] = path

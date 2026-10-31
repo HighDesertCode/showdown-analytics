@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import pytest
 
@@ -77,9 +78,22 @@ def test_use_ca_cert_writes_the_certificate_and_points_libpq_at_it(temp_dir, mon
 
     db.use_ca_cert_from_environment()
 
-    path = temp_dir / "database-ca.crt"
-    assert os.environ["PGSSLROOTCERT"] == str(path)
+    path = Path(os.environ["PGSSLROOTCERT"])
+    assert path.parent == temp_dir
+    assert path.name.startswith("database-ca-")
     assert path.read_text() == PEM
+    assert path.stat().st_mode & 0o777 == 0o600
+
+
+def test_use_ca_cert_gives_each_command_its_own_file(temp_dir, monkeypatch):
+    monkeypatch.setenv("DATABASE_CA_CERT", PEM)
+    paths = []
+    for _ in range(2):
+        db.use_ca_cert_from_environment()
+        paths.append(os.environ.pop("PGSSLROOTCERT"))
+
+    assert paths[0] != paths[1]
+    assert all(Path(path).read_text() == PEM for path in paths)
 
 
 def test_use_ca_cert_does_nothing_without_the_setting(temp_dir, monkeypatch):
