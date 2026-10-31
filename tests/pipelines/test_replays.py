@@ -93,15 +93,17 @@ def test_search_starts_paging_at_the_end(monkeypatch, waits):
     assert requested == [replays.search_url("gen9monotype", 2000)]
 
 
-def test_search_stops_when_a_full_page_has_nothing_new(monkeypatch, waits):
-    # More than a page of replays uploaded in the same second would otherwise be requested forever.
+def test_search_fails_when_a_full_page_has_nothing_new(monkeypatch, waits):
+    # A full page of replays uploaded in the same second comes back again, and older replays can't be reached.
     page = [entry(1000 - n, 2000) for n in range(replays.PAGE_SIZE)]
     requested = serve(
         monkeypatch,
         {replays.search_url("gen9monotype"): page, replays.search_url("gen9monotype", 2001): page},
     )
+    results = []
 
-    results = list(replays.search("gen9monotype", start=datetime.fromtimestamp(0, UTC)))
+    with pytest.raises(RuntimeError, match="can't page past them"):
+        results.extend(replays.search("gen9monotype", start=datetime.fromtimestamp(0, UTC)))
 
     assert len(results) == replays.PAGE_SIZE
     assert len(requested) == 2

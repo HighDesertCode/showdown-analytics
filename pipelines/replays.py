@@ -64,7 +64,8 @@ def search(format_id: str, start: datetime, end: datetime | None = None) -> Iter
     the pages it needs.
 
     Each later page starts one second after the previous page's oldest upload, so replays uploaded in the same second
-    as a page boundary aren't missed; replays already yielded are skipped.
+    as a page boundary aren't missed; replays already yielded are skipped. Search can only page by upload time, so a
+    full page of replays from a single second can't be paged past without skipping some; that raises an error.
     """
     seen: set[str] = set()
     before = None if end is None else math.ceil(end.timestamp())
@@ -76,8 +77,12 @@ def search(format_id: str, start: datetime, end: datetime | None = None) -> Iter
                 return
             seen.add(result.replay_id)
             yield result
-        if len(page) < PAGE_SIZE or not new:
+        if len(page) < PAGE_SIZE:
             return
+        if not new:
+            raise RuntimeError(
+                f"More than {PAGE_SIZE - 1} replays were uploaded at {page[-1].uploaded_at}; can't page past them"
+            )
         before = int(page[-1].uploaded_at.timestamp()) + 1
 
 
