@@ -45,6 +45,10 @@ SQL_FILES = [
     "create/raw/replay.sql",
     "index/raw/replay.sql",
     "create/raw/replay_collection_run.sql",
+    "create/raw/battle.sql",
+    "create/raw/battle_side.sql",
+    "create/raw/battle_pokemon.sql",
+    "create/raw/battle_event.sql",
     "create/staging/schema.sql",
     "create/api/schema.sql",
 ]
