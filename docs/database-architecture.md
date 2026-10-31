@@ -1,6 +1,6 @@
 # Database Architecture
 
-Showdown Analytics stores competitive Pokémon data in PostgreSQL: reference data from Pokémon Showdown, and monthly usage statistics from Smogon. This page describes the database and its tables.
+Showdown Analytics stores competitive Pokémon data in PostgreSQL: reference data and public battle replays from Pokémon Showdown, and monthly usage statistics from Smogon. This page describes the database and its tables.
 
 ## Database
 
@@ -19,6 +19,7 @@ Data moves through layers. Source data is stored as published, then cleaned and 
 flowchart LR
     showdown[Showdown data files] --> reference
     smogon[Smogon monthly reports] --> raw --> staging --> api
+    replays[Showdown replays] --> raw
     reference --> staging
     api --> clients[Public API and website]
 ```
@@ -26,10 +27,9 @@ flowchart LR
 | Schema | Status | Contents |
 | --- | --- | --- |
 | `reference` | Deployed | Pokémon, types, abilities, moves, items, and natures from Showdown |
-| `raw` | Deployed | Smogon's monthly reports as published |
+| `raw` | Deployed | Smogon's monthly reports and Showdown's replays as published |
 | `staging` | Deployed | Cleaned report data with names matched to `reference` |
 | `api` | Deployed | The published statistics; the only schema the API reads |
-| `replays` | Planned (M4) | Public battle replays |
 | `research` | Planned (M5) | Private team and battle records, never exposed publicly |
 
 ## Reference Data
@@ -286,6 +286,16 @@ Row counts below are for September 2026.
 | `matchup_chart_viability` | 36 | Smogon's ViabilityScore per type, a published score rather than a win rate |
 
 `ingestion_run` logs each load: when it started and finished, its status (`running`, `succeeded`, `partial` when some downloads failed, or `failed` with the error), and how many files it loaded, skipped, and failed. The run updates its own row as it goes, the only update the loader can make, so a run killed partway through stays `running` and shows how far it got.
+
+## Replays
+
+Public Gen 9 Monotype replays from Pokémon Showdown are stored in `raw` as published. They are a sample of battles players chose to upload, not the whole ladder, so they are kept apart from Smogon's statistics.
+
+| Table | Contents |
+| --- | --- |
+| `replay` | One row per replay: its ID, format, players, published rating, upload time, and full battle log. Rows are never changed, so a replay its uploader later deletes is kept. |
+
+`replay_collection_run` logs each collection run the same way `ingestion_run` logs Smogon loads: its status, and how many replays it loaded and failed to download.
 
 ## Published Statistics
 

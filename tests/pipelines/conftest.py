@@ -42,6 +42,9 @@ SQL_FILES = [
     "create/raw/matchup_chart_cell.sql",
     "create/raw/matchup_chart_viability.sql",
     "create/raw/ingestion_run.sql",
+    "create/raw/replay.sql",
+    "index/raw/replay.sql",
+    "create/raw/replay_collection_run.sql",
     "create/staging/schema.sql",
     "create/api/schema.sql",
 ]
