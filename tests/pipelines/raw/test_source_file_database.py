@@ -62,6 +62,17 @@ def test_is_loaded_compares_only_the_latest_version(conn):
     assert source_file.is_loaded(conn, reverted)
 
 
+def test_missing_urls_lists_files_with_no_recorded_version(conn):
+    urls = [file.url for file in smogon.report_files("chaos", date(2026, 9, 1), ["water"])]
+    assert source_file.missing_urls(conn, urls) == urls
+
+    # Every version of a URL counts as recorded, whatever its content.
+    source_file.insert(conn, RETRIEVED, None)
+    source_file.insert(conn, replace(RETRIEVED, retrieved_at=RETRIEVED.retrieved_at + timedelta(days=1)), None)
+
+    assert source_file.missing_urls(conn, urls) == [url for url in urls if url != WATER.url]
+
+
 def test_insert_rejects_a_second_version_retrieved_at_the_same_time(conn):
     source_file.insert(conn, RETRIEVED, None)
 

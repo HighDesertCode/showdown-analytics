@@ -95,3 +95,34 @@ def test_fetch_raises_the_last_error_after_three_tries(monkeypatch, waits):
         download.fetch(URL)
     assert len(requests) == 3
     assert waits == [5, 15]
+
+
+def test_exists_sends_a_head_request(monkeypatch, waits):
+    requests = respond_with(monkeypatch, FakeResponse())
+
+    assert download.exists(URL) is True
+    assert requests[0].get_method() == "HEAD"
+    assert requests[0].get_header("User-agent") == download.USER_AGENT
+
+
+def test_exists_is_false_for_a_missing_file(monkeypatch, waits):
+    requests = respond_with(monkeypatch, http_error(404))
+
+    assert download.exists(URL) is False
+    assert len(requests) == 1
+    assert waits == []
+
+
+def test_exists_retries_a_server_error(monkeypatch, waits):
+    requests = respond_with(monkeypatch, http_error(503), FakeResponse())
+
+    assert download.exists(URL) is True
+    assert len(requests) == 2
+    assert waits == [5]
+
+
+def test_exists_raises_other_client_errors(monkeypatch, waits):
+    respond_with(monkeypatch, http_error(403))
+
+    with pytest.raises(urllib.error.HTTPError, match="403"):
+        download.exists(URL)

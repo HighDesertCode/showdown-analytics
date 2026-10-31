@@ -1,14 +1,21 @@
 """Entry point: `uv run --env-file .env pipelines <command>`."""
 
 import argparse
+import shutil
+import subprocess
 import sys
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
+
+from psycopg import Connection
 
 from pipelines import db, download, showdown, smogon
-from pipelines.raw import ingestion_run
+from pipelines.raw import ingestion_run, source_file
 from pipelines.raw.load import load_file
 from pipelines.reference.common import existing_ids
 from pipelines.reference.load import load_all
+
+# Relative to the working directory: the repository root locally, and /app in the image.
+TRANSFORM_DIR = "transform"
 
 
 def check_connection() -> None:
@@ -32,14 +39,21 @@ def load_reference() -> None:
         print(f"{table:<16} {count:>5} inserted")
 
 
+def list_report_files(
+    conn: Connection, month: date, families: list[str]
+) -> tuple[list[smogon.ReportFile], dict[str, int]]:
+    """Lists the month's files for each family, with the type_id of each team type."""
+    type_ids = existing_ids(conn, "type")
+    if not type_ids:
+        # Without types, only overall reports would be listed and per-type reports silently skipped.
+        raise RuntimeError("reference.type is empty; run `pipelines load-reference` first")
+    team_types = sorted(type_ids, key=type_ids.__getitem__)
+    return [file for family in families for file in smogon.report_files(family, month, team_types)], type_ids
+
+
 def load_smogon(month: date, families: list[str]) -> None:
     with db.connect() as conn:
-        type_ids = existing_ids(conn, "type")
-        if not type_ids:
-            # Without types, only overall reports would be listed and per-type reports silently skipped.
-            raise RuntimeError("reference.type is empty; run `pipelines load-reference` first")
-        team_types = sorted(type_ids, key=type_ids.__getitem__)
-        files = [file for family in families for file in smogon.report_files(family, month, team_types)]
+        files, type_ids = list_report_files(conn, month, families)
         width = max(len(family) for family in families)
         failed: list[tuple[smogon.ReportFile, Exception]] = []
         run_id = ingestion_run.start(conn, month, families)
@@ -80,6 +94,48 @@ def load_smogon(month: date, families: list[str]) -> None:
         raise SystemExit(1)
 
 
+def previous_month(today: date) -> date:
+    return (today.replace(day=1) - timedelta(days=1)).replace(day=1)
+
+
+def update_smogon(today: date) -> None:
+    """Loads last month's Smogon reports once Smogon publishes them, then builds staging and api.
+
+    Run daily by the scheduled job. It downloads nothing once the month is loaded, and makes one HEAD request
+    a day until Smogon publishes it.
+    """
+    month = previous_month(today)
+    families = list(smogon.FAMILIES)
+    # Checked first, so a missing dbt fails the job before anything is loaded.
+    if shutil.which("dbt") is None:
+        raise RuntimeError("dbt is not installed; run with `uv run --group dbt`")
+    with db.connect() as conn:
+        files, _ = list_report_files(conn, month, families)
+        missing = source_file.missing_urls(conn, [file.url for file in files])
+    if not missing:
+        print(f"{month:%Y-%m} is already loaded")
+        return
+    if not download.exists(smogon.url("usage", month, smogon.BASELINES[0])):
+        print(f"{month:%Y-%m} isn't published yet")
+        return
+    print(f"{month:%Y-%m}: loading {len(missing)} of {len(files)} files")
+    load_smogon(month, families)
+    # Staging first, so a failed staging test (such as a month missing files) leaves every api table untouched.
+    for selector in ("staging", "api"):
+        run_dbt("build", "--select", selector)
+
+
+def run_dbt(*arguments: str) -> None:
+    """Runs dbt on the transform project, exiting with dbt's status if it fails."""
+    # Flush first, so this command's output stays ahead of dbt's in the job's logs.
+    sys.stdout.flush()
+    command = ["dbt", *arguments, "--project-dir", TRANSFORM_DIR, "--profiles-dir", TRANSFORM_DIR]
+    result = subprocess.run(command, check=False)
+    if result.returncode != 0:
+        print(f"`{' '.join(command)}` failed with status {result.returncode}", file=sys.stderr)
+        raise SystemExit(result.returncode)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="pipelines")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -93,7 +149,11 @@ def main() -> None:
         choices=list(smogon.FAMILIES),
         help="load only this report family; repeat for several (default: every family)",
     )
+    commands.add_parser(
+        "update-smogon", help="load last month's Smogon reports if published and not yet loaded, then run dbt"
+    )
     args = parser.parse_args()
+    db.use_ca_cert_from_environment()
 
     if args.command == "check-connection":
         check_connection()
@@ -101,6 +161,8 @@ def main() -> None:
         load_reference()
     elif args.command == "load-smogon":
         load_smogon(args.month, args.family or list(smogon.FAMILIES))
+    elif args.command == "update-smogon":
+        update_smogon(datetime.now(UTC).date())
 
 
 if __name__ == "__main__":

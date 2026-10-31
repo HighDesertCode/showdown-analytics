@@ -40,6 +40,13 @@ def is_loaded(conn: Connection, retrieved: RetrievedFile) -> bool:
     return row is not None and row[0] == retrieved.sha256
 
 
+def missing_urls(conn: Connection, urls: list[str]) -> list[str]:
+    """Returns the URLs with no recorded version, in the order given, without downloading anything."""
+    rows = conn.execute("SELECT DISTINCT url FROM raw.source_file WHERE url = ANY(%s)", (urls,))
+    recorded = {url for (url,) in rows}
+    return [url for url in urls if url not in recorded]
+
+
 def insert(conn: Connection, retrieved: RetrievedFile, team_type_id: int | None) -> int:
     """Records the file and returns its source_file_id."""
     file = retrieved.file

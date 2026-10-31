@@ -11,10 +11,26 @@ on:
       - "README.md"
       - ".dockerignore"
       - ".github/workflows/pipelines-docker.yml"
+  # Keeps the default branch's code scanning alerts current, so fixed vulnerabilities close.
+  push:
+    branches: [main]
+    paths:
+      - "pipelines/**"
+      - "transform/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".python-version"
+      - "README.md"
+      - ".dockerignore"
+      - ".github/workflows/pipelines-docker.yml"
+  # New vulnerabilities are published against unchanged packages, so scan weekly too.
+  schedule:
+    - cron: "0 13 * * 1"
 
 permissions:
   contents: read
 
+# Anchore's major tags lag behind their releases, so their actions are pinned to exact versions.
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -29,3 +45,84 @@ jobs:
         run: |
           docker run --rm showdown-pipelines pipelines --help
           docker run --rm showdown-pipelines dbt --version
+
+      - name: Save Image
+        run: docker save -o showdown-pipelines.tar showdown-pipelines
+
+      - name: Upload Image
+        uses: actions/upload-artifact@v7
+        with:
+          name: pipelines-image
+          path: showdown-pipelines.tar
+          retention-days: 1
+
+  syft:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Image
+        uses: actions/download-artifact@v8
+        with:
+          name: pipelines-image
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0.24.3
+        with:
+          image: docker-archive:showdown-pipelines.tar
+          format: syft-json
+          output-file: sbom.syft.json
+          upload-artifact: false
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v7
+        with:
+          name: pipelines-sbom
+          path: sbom.syft.json
+
+  grype:
+    needs: syft
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download SBOM
+        uses: actions/download-artifact@v8
+        with:
+          name: pipelines-sbom
+
+      # Reports only vulnerabilities with a fix, without failing the build; High and Critical show as errors.
+      - name: Scan SBOM
+        uses: anchore/scan-action@v7.4.2
+        with:
+          sbom: sbom.syft.json
+          only-fixed: true
+          severity-cutoff: high
+          fail-build: false
+          output-format: sarif
+          output-file: results.sarif
+
+      - name: Upload Scan Results
+        uses: actions/upload-artifact@v7
+        with:
+          name: pipelines-sarif
+          path: results.sarif
+
+  sarif:
+    needs: grype
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      # upload-sarif looks up the commit being scanned in the checkout.
+      - name: Repository Checkout
+        uses: actions/checkout@v7
+
+      - name: Download Scan Results
+        uses: actions/download-artifact@v8
+        with:
+          name: pipelines-sarif
+
+      - name: Upload to Code Scanning
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: results.sarif
+          category: pipelines-image
