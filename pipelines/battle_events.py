@@ -23,6 +23,8 @@ POKEMON = re.compile(r"^(?P<side>p[12])(?P<position>[a-z]?): (?P<nickname>.+)$")
 TAG = re.compile(r"^\[(?P<name>[a-z]+)\] ?(?P<value>.*)$")
 # Prefixes that only say what kind of effect a name is, e.g. "move: Toxic Spikes".
 PREFIXES = ("move: ", "ability: ", "item: ")
+# HP percentages at a health bar color boundary, and the colors the log may add to them (green, yellow, red).
+BAR_BOUNDARIES = {"50": ("g", "y"), "20": ("y", "r")}
 # Lines that end the current move's effects: the blank line before end-of-turn effects, and the next turn.
 MOVE_ENDS = {"", "upkeep", "turn"}
 # Event names for lines whose second argument is the Pokémon they affect.
@@ -139,6 +141,10 @@ class _Parser:
         if value == "0":
             return 0
         current, _, maximum = value.partition("/")
+        # Since late April 2026, HP that rounds to a health bar color boundary carries the bar's color, e.g. "50/100g"
+        # for just over half; the color stays in the log line.
+        if current in BAR_BOUNDARIES and maximum[3:] in BAR_BOUNDARIES[current]:
+            maximum = maximum[:3]
         if maximum != "100" or not current.isdigit() or int(current) > 100:
             raise self.error(f"unexpected HP {text!r}")
         return int(current)
