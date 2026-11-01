@@ -3,8 +3,13 @@
 Each row keeps its log line. HP is a percentage of max HP, as the log shows it. An effect is linked (caused_by) to the
 move it happened during, or to the hazard that caused it on switch-in; the only cause the parser deduces rather than
 reads is poisoning on switch-in, which the log doesn't attribute, from Toxic Spikes on that side (source_inferred).
+
+A Pokémon with Illusion (Zoroark) enters disguised as another on its team, and the log names it as that Pokémon until
+a `replace` line reveals it. The reveal states who it was all along, so the events since it switched in are credited
+to it then. A disguise that's never revealed leaves its events with the Pokémon it impersonated, as the log states.
 """
 
+import dataclasses
 import re
 from dataclasses import dataclass
 
@@ -76,6 +81,9 @@ class _Parser:
         self.hp: dict[tuple[str, str], int] = {}
         self.conditions: dict[str, dict[str, int]] = {"p1": {}, "p2": {}}  # side -> condition -> seq that set it
         self.entering: dict[str, str] = {}  # side -> Pokémon that switched in, until the next move or turn end
+        # side -> the active Pokémon's switch-in seq, and its HP before then, in case Illusion was disguising it
+        self.switched_in: dict[str, tuple[int, int | None]] = {}
+        self.active: dict[str, str] = {}  # side -> the active Pokémon, as the log names it
 
     def error(self, message: str) -> ReplayFormatError:
         return ReplayFormatError(f"{self.replay_id} turn {self.turn}: {message}")
@@ -138,14 +146,18 @@ class _Parser:
             )  # fmt: skip
         elif kind in ("switch", "drag"):
             side, pokemon = self.pokemon(args[0])
+            hp_before = self.hp.get((side, pokemon))
             self.hp[(side, pokemon)] = self.hp_value(args[2])
             self.entering[side] = pokemon
-            self.add(line, side, pokemon, kind, detail=_species(args[1]), hp_after_percent=self.hp[(side, pokemon)],
-                     source=self.source(tags))  # fmt: skip
-        elif kind in ("replace", "detailschange", "-formechange"):
+            self.active[side] = pokemon
+            seq = self.add(line, side, pokemon, kind, detail=_species(args[1]),
+                           hp_after_percent=self.hp[(side, pokemon)], source=self.source(tags))  # fmt: skip
+            self.switched_in[side] = (seq, hp_before)
+        elif kind == "replace":
+            self.reveal(line, args, tags)
+        elif kind in ("detailschange", "-formechange"):
             side, pokemon = self.pokemon(args[0])
-            self.add(line, side, pokemon, "replace" if kind == "replace" else "form", detail=_species(args[1]),
-                     source=self.source(tags))  # fmt: skip
+            self.add(line, side, pokemon, "form", detail=_species(args[1]), source=self.source(tags))
         elif kind == "faint":
             side, pokemon = self.pokemon(args[0])
             # Some faints have no damage line before them (Destiny Bond, Perish Song), and Revival Blessing heals
@@ -189,6 +201,31 @@ class _Parser:
                      source=self.source(tags))  # fmt: skip
         else:
             raise self.error(f"no event handling for {kind!r}")
+
+    def reveal(self, line: str, args: list[str], tags: dict[str, str]) -> None:
+        """Credits the events since the disguised switch-in to the Pokémon an Illusion was hiding."""
+        side, pokemon = self.pokemon(args[0])
+        if side not in self.switched_in:
+            raise self.error(f"{side} {pokemon} is revealed before anything switched in")
+        disguise = self.active[side]
+        if disguise == pokemon:
+            raise self.error(f"{side} {pokemon} is revealed but wasn't disguised")
+        switch_seq, hp_before = self.switched_in[side]
+        for index in range(switch_seq - 1, len(self.events)):
+            event, changes = self.events[index], {}
+            if event.side == side and event.pokemon == disguise:
+                changes["pokemon"] = pokemon
+            if event.target_side == side and event.target_pokemon == disguise:
+                changes["target_pokemon"] = pokemon
+            if changes:
+                self.events[index] = dataclasses.replace(event, **changes)
+        self.hp[(side, pokemon)] = self.hp.pop((side, disguise))
+        if hp_before is not None:
+            self.hp[(side, disguise)] = hp_before
+        if self.entering.get(side) == disguise:
+            self.entering[side] = pokemon
+        self.active[side] = pokemon
+        self.add(line, side, pokemon, "replace", detail=_species(args[1]), source=self.source(tags))
 
     def hp_line(self, line: str, kind: str, args: list[str], tags: dict[str, str]) -> None:
         side, pokemon = self.pokemon(args[0])

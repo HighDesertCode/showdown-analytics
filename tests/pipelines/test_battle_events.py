@@ -133,6 +133,75 @@ def test_a_damage_line_that_changes_nothing_is_kept():
     assert rows(events[-1:], "event", "damage_percent", "hp_after_percent") == [("damage", None, 100)]
 
 
+# From gen9monotype-2549309010: Zoroark-Hisui enters disguised as Maushold, which is still on the bench at full HP.
+ILLUSION_TEAM = {("p1", "Sneasler"): "Sneasler", ("p2", "Ursaluna"): "Ursaluna", ("p2", "Maushold"): "Maushold-Four",
+                 ("p2", "Zoroark"): "Zoroark-Hisui"}  # fmt: skip
+ILLUSION = """|switch|p1a: Sneasler|Sneasler, M|100/100
+|switch|p2a: Ursaluna|Ursaluna, F|100/100
+|turn|1
+|switch|p2a: Maushold|Maushold-Four|100/100
+|turn|2
+|move|p1a: Sneasler|Dire Claw|p2a: Maushold
+|-resisted|p2a: Maushold
+|-damage|p2a: Maushold|50/100
+|-status|p2a: Maushold|slp
+|replace|p2a: Zoroark|Zoroark-Hisui, M
+|-end|p2a: Zoroark|Illusion
+|cant|p2a: Zoroark|slp
+|
+|upkeep
+|turn|3
+|move|p1a: Sneasler|Dire Claw|p2a: Zoroark
+|-damage|p2a: Zoroark|6/100 slp
+"""
+
+
+def parse_illusion(log: str) -> tuple[Event, ...]:
+    return battle_events.parse(log.splitlines(), ILLUSION_TEAM, REPLAY_ID, battle_log.EVENT_TYPES)
+
+
+def test_a_revealed_illusion_is_credited_with_its_events_since_it_switched_in():
+    events = parse_illusion(ILLUSION)
+
+    assert rows(events[2:], "seq", "side", "pokemon", "event", "detail", "target_pokemon", "damage_percent",
+                "hp_after_percent") == [
+        (3, "p2", "Zoroark-Hisui", "switch", "Maushold-Four", None, None, 100),
+        (4, "p1", "Sneasler", "move", "Dire Claw", "Zoroark-Hisui", None, None),
+        (5, "p2", "Zoroark-Hisui", "resisted", None, None, None, None),
+        (6, "p2", "Zoroark-Hisui", "damage", None, None, 50, 50),
+        (7, "p2", "Zoroark-Hisui", "status", "slp", None, None, None),
+        (8, "p2", "Zoroark-Hisui", "replace", "Zoroark-Hisui", None, None, None),
+        (9, "p2", "Zoroark-Hisui", "end", "Illusion", None, None, None),
+        (10, "p2", "Zoroark-Hisui", "cant", "slp", None, None, None),
+        (11, "p1", "Sneasler", "move", "Dire Claw", "Zoroark-Hisui", None, None),
+        (12, "p2", "Zoroark-Hisui", "damage", None, None, 44, 6),
+    ]  # fmt: skip
+
+
+def test_the_impersonated_pokemon_keeps_its_own_hp():
+    # Maushold enters for the first time later, at the full HP the disguise's damage never touched.
+    events = parse_illusion(
+        ILLUSION
+        + """|-damage|p2a: Zoroark|0 fnt
+|faint|p2a: Zoroark
+|
+|upkeep
+|switch|p2a: Maushold|Maushold-Four|100/100
+|turn|4
+|move|p1a: Sneasler|Close Combat|p2a: Maushold
+|-damage|p2a: Maushold|40/100
+"""
+    )
+
+    assert rows(events[-1:], "pokemon", "damage_percent", "hp_after_percent") == [("Maushold-Four", 60, 40)]
+
+
+def test_an_illusion_never_revealed_stays_with_the_pokemon_it_impersonated():
+    events = parse_illusion(ILLUSION[: ILLUSION.index("|replace|")])
+
+    assert {event.pokemon for event in events[2:] if event.side == "p2"} == {"Maushold-Four"}
+
+
 @pytest.mark.parametrize(
     ("line", "detail"),
     [
@@ -145,6 +214,29 @@ def test_a_damage_line_that_changes_nothing_is_kept():
 )
 def test_details(line, detail):
     assert parse(OPENING + line + "\n")[-1].detail == detail
+
+
+@pytest.mark.parametrize(
+    ("line", "event", "detail", "source"),
+    [
+        ("|detailschange|p2a: Tinkaton|Tinkaton-Mega, F", "form", "Tinkaton-Mega", None),
+        (
+            "|-formechange|p2a: Tinkaton|Tinkaton-Busted|[from] ability: Disguise",
+            "form",
+            "Tinkaton-Busted",
+            "ability: Disguise",
+        ),
+        ("|-terastallize|p2a: Tinkaton|Steel", "terastallize", "Steel", None),
+        ("|-item|p2a: Tinkaton|Air Balloon", "item", "Air Balloon", None),
+        ("|-enditem|p2a: Tinkaton|Air Balloon", "item removed", "Air Balloon", None),
+        ("|-ability|p2a: Tinkaton|Pressure", "ability", "Pressure", None),
+        ("|-heal|p2a: Tinkaton|100/100|[from] item: Leftovers", "heal", None, "item: Leftovers"),
+    ],
+)
+def test_revealed_forms_items_and_abilities(line, event, detail, source):
+    events = parse(OPENING + "|-damage|p2a: Tinkaton|90/100\n" + line + "\n")
+
+    assert rows(events[-1:], "event", "detail", "source", "source_inferred") == [(event, detail, source, False)]
 
 
 def test_weather_and_field_events_have_no_pokemon():
@@ -173,6 +265,7 @@ def test_weather_and_field_events_have_no_pokemon():
         ("|-damage|p1a: Ghostly|50/100\n|-damage|p1a: Ghostly|60/100", "-damage takes p1 Gengar from 50 to 60"),
         ("|-heal|p1a: Ghostly|50/100", "-heal takes p1 Gengar from 100 to 50"),
         ("|-damage|p1a: Ghostly|150/300", "unexpected HP '150/300'"),
+        ("|replace|p1a: Ghostly|Gengar, M", "p1 Gengar is revealed but wasn't disguised"),
     ],
 )
 def test_parse_rejects_events_that_dont_add_up(lines, message):
