@@ -1,4 +1,5 @@
--- Grants for the project's loader user. Loaders are insert-only (no DELETE, and UPDATE only on run tracking).
+-- Grants for the project's loader user. Loaders are insert-only (UPDATE only on run tracking, and DELETE only on
+-- parsed battles).
 -- Default privileges apply to tables doadmin creates later; ON ALL TABLES covers existing ones.
 
 GRANT USAGE ON SCHEMA reference TO "showdown-analyst";
@@ -17,6 +18,10 @@ GRANT UPDATE (finished_at, status, files_loaded, files_skipped, files_failed, er
     ON raw.ingestion_run TO "showdown-analyst";
 GRANT UPDATE (finished_at, status, replays_loaded, replays_failed, error)
     ON raw.replay_collection_run TO "showdown-analyst";
+
+-- Parsed battles are derived from raw.replay, so re-parsing one deletes its old rows (raw.battle cascades to the
+-- rest) and inserts the new parse. raw.replay itself can't be deleted.
+GRANT DELETE ON raw.battle, raw.battle_side, raw.battle_pokemon, raw.battle_event TO "showdown-analyst";
 
 -- Every role can connect to every database, and create temporary tables in it, by default. Keep project roles
 -- out of defaultdb, and let only the project's roles into this one. Run while connected to showdown-database;

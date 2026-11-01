@@ -8,8 +8,8 @@ from datetime import UTC, date, datetime, time, timedelta
 
 from psycopg import Connection
 
-from pipelines import db, download, replays, showdown, smogon
-from pipelines.raw import ingestion_run, replay, replay_collection_run, source_file
+from pipelines import battle_log, db, download, replays, showdown, smogon
+from pipelines.raw import battle, ingestion_run, replay, replay_collection_run, source_file
 from pipelines.raw.load import load_file
 from pipelines.reference.common import existing_ids
 from pipelines.reference.load import load_all
@@ -200,6 +200,35 @@ def collect_replays(start: date | None, end: date | None) -> None:
         raise SystemExit(1)
 
 
+def parse_replays(reparse: bool = False) -> None:
+    """Parses every stored replay that has no parsed battle yet, or with `reparse`, every stored replay again.
+
+    Each battle is parsed, and with `reparse` its old parse deleted, then inserted and committed on its own, so a
+    battle never mixes two parses. A replay the parser rejects keeps its old parse (or stays unparsed) and is listed
+    at the end, and the command exits with status 1; once the parser handles it, a rerun parses it.
+    """
+    with db.connect() as conn:
+        replay_ids = battle.all_ids(conn) if reparse else battle.unparsed_ids(conn)
+        print(f"{len(replay_ids)} replays to {'re-parse' if reparse else 'parse'}")
+        failed: list[tuple[str, Exception]] = []
+        for replay_id in replay_ids:
+            try:
+                parsed = battle_log.parse(battle.log(conn, replay_id), replay_id)
+            except replays.ReplayFormatError as error:
+                failed.append((replay_id, error))
+                continue
+            if reparse:
+                battle.delete(conn, replay_id)
+            battle.insert(conn, parsed, datetime.now(UTC))
+            conn.commit()
+    print(f"{len(replay_ids) - len(failed)} parsed, {len(failed)} failed")
+    if failed:
+        print(f"\n{len(failed)} replays couldn't be parsed:", file=sys.stderr)
+        for replay_id, error in failed:
+            print(f"  {replay_id}: {error}", file=sys.stderr)
+        raise SystemExit(1)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="pipelines")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -222,6 +251,10 @@ def main() -> None:
     )
     collect_parser.add_argument("--start", type=date.fromisoformat, help="first upload day (UTC), e.g. 2026-03-01")
     collect_parser.add_argument("--end", type=date.fromisoformat, help="last upload day (UTC), included")
+    parse_parser = commands.add_parser("parse-replays", help="parse stored replays that haven't been parsed yet")
+    parse_parser.add_argument(
+        "--reparse", action="store_true", help="parse every stored replay again, replacing its earlier parse"
+    )
     args = parser.parse_args()
     if args.command == "collect-replays":
         if (args.start is None) != (args.end is None):
@@ -240,6 +273,8 @@ def main() -> None:
         update_smogon(datetime.now(UTC).date())
     elif args.command == "collect-replays":
         collect_replays(args.start, args.end)
+    elif args.command == "parse-replays":
+        parse_replays(args.reparse)
 
 
 if __name__ == "__main__":

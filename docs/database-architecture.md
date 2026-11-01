@@ -294,6 +294,12 @@ Public Gen 9 Monotype replays from Pokémon Showdown are stored in `raw` as publ
 | Table | Contents |
 | --- | --- |
 | `replay` | One row per replay: its ID, format, players, published rating, upload time, and full battle log. Rows are never changed, so a replay its uploader later deletes is kept. |
+| `battle` | One row per parsed replay: whether it was rated, when it started and ended, turns, the winner, how it ended (knockout, forfeit, inactivity, or tie), and its rules |
+| `battle_side` | Each player, their ladder Elo before and after (not comparable to Smogon's Glicko baselines), and their result |
+| `battle_pokemon` | Each team's six Pokémon as shown at team preview, with the nickname used in the log |
+| `battle_event` | Every game event in order: moves, switches, damage and healing (as percentages of max HP), status, boosts, hazards, and revealed abilities and items. Each effect links to the move or hazard that caused it, causes the parser deduced are flagged, and the original log line is kept |
+
+The battle tables hold only what the log states, plus the inferences the parser flags; team types, leads, and other summaries are computed in dbt. They are derived from `replay`, so a replay is re-parsed by deleting its `battle` row, which deletes its rows in the other three, and inserting the new parse; this is the only delete the loader can make.
 
 `replay_collection_run` logs each collection run the same way `ingestion_run` logs Smogon loads: its status, and how many replays it loaded and failed to download.
 
