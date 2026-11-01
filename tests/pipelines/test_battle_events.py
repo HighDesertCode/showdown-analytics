@@ -13,8 +13,9 @@ OPENING = """|switch|p1a: Ghostly|Gengar, M|100/100
 """
 
 
-def parse(log: str) -> tuple[Event, ...]:
-    return battle_events.parse(log.splitlines(), TEAM, REPLAY_ID, battle_log.EVENT_TYPES)
+def parse(log: str, team: dict[tuple[str, str], str] = TEAM) -> tuple[Event, ...]:
+    nicknames: dict[tuple[str, str], tuple[str, ...]] = {key: (species,) for key, species in team.items()}
+    return battle_events.parse(log.splitlines(), nicknames, REPLAY_ID, battle_log.EVENT_TYPES)
 
 
 def rows(events, *fields):
@@ -157,7 +158,7 @@ ILLUSION = """|switch|p1a: Sneasler|Sneasler, M|100/100
 
 
 def parse_illusion(log: str) -> tuple[Event, ...]:
-    return battle_events.parse(log.splitlines(), ILLUSION_TEAM, REPLAY_ID, battle_log.EVENT_TYPES)
+    return parse(log, ILLUSION_TEAM)
 
 
 def test_a_revealed_illusion_is_credited_with_its_events_since_it_switched_in():
@@ -210,6 +211,8 @@ def test_an_illusion_never_revealed_stays_with_the_pokemon_it_impersonated():
         ("|-setboost|p1a: Ghostly|atk|6|[from] move: Belly Drum", "=6 atk"),
         ("|-start|p1a: Ghostly|typechange|Bug|[from] ability: Protean", "typechange Bug"),
         ("|-enditem|p1a: Ghostly|Leftovers|[from] move: Knock Off|[of] p2a: Tinkaton", "Leftovers"),
+        ("|-swapboost|p1a: Ghostly|p2a: Tinkaton|atk, spa|[from] move: Power Swap", "atk, spa"),
+        ("|-block|p1a: Ghostly|item: Ability Shield", "Ability Shield"),
     ],
 )
 def test_details(line, detail):
@@ -239,6 +242,71 @@ def test_revealed_forms_items_and_abilities(line, event, detail, source):
     assert rows(events[-1:], "event", "detail", "source", "source_inferred") == [(event, detail, source, False)]
 
 
+@pytest.mark.parametrize(
+    ("line", "event", "target"),
+    [
+        ("|-copyboost|p1a: Ghostly|p2a: Tinkaton|[from] move: Psych Up", "copy boosts", "Tinkaton"),
+        ("|-swapboost|p1a: Ghostly|p2a: Tinkaton|def, spd|[from] move: Guard Swap", "swap boosts", "Tinkaton"),
+        ("|-invertboost|p1a: Ghostly|[from] move: Topsy-Turvy", "invert boosts", None),
+        ("|-endability|p1a: Ghostly", "ability suppressed", None),
+    ],
+)
+def test_boost_and_ability_moves(line, event, target):
+    events = parse(OPENING + "|move|p2a: Tinkaton|Psych Up|p1a: Ghostly\n" + line + "\n")
+
+    assert rows(events[-1:], "pokemon", "event", "target_pokemon", "caused_by_seq") == [("Gengar", event, target, 3)]
+
+
+def test_pain_split_writes_a_line_for_each_pokemon():
+    events = parse(
+        OPENING
+        + """|move|p1a: Ghostly|Pain Split|p2a: Tinkaton
+|-sethp|p2a: Tinkaton|60/100|[from] move: Pain Split|[silent]
+|-damage|p1a: Ghostly|20/100
+|-sethp|p1a: Ghostly|60/100|[from] move: Pain Split
+"""
+    )
+
+    assert rows(events[3::2], "pokemon", "event", "damage_percent", "healed_percent", "hp_after_percent") == [
+        ("Tinkaton", "set hp", 40, None, 60),
+        ("Gengar", "set hp", None, 40, 60),
+    ]
+
+
+def test_teammates_sharing_a_nickname_are_told_apart_by_species():
+    # Showdown's team validator allows it; only the species on a switch line says which one entered.
+    team = {("p1", "Ghost"): ("Gengar", "Chandelure"), ("p2", "Tinkaton"): ("Tinkaton",)}
+    log = """|switch|p1a: Ghost|Gengar, M|100/100
+|switch|p2a: Tinkaton|Tinkaton, F|100/100
+|turn|1
+|move|p2a: Tinkaton|Gigaton Hammer|p1a: Ghost
+|-damage|p1a: Ghost|0 fnt
+|faint|p1a: Ghost
+|
+|upkeep
+|switch|p1a: Ghost|Chandelure, F|100/100
+|turn|2
+|move|p2a: Tinkaton|Gigaton Hammer|p1a: Ghost
+|-damage|p1a: Ghost|30/100
+"""
+
+    events = battle_events.parse(log.splitlines(), team, REPLAY_ID, battle_log.EVENT_TYPES)
+
+    assert rows(events, "pokemon", "event", "target_pokemon", "hp_after_percent")[2:] == [
+        ("Tinkaton", "move", "Gengar", None),
+        ("Gengar", "damage", None, 0),
+        ("Gengar", "faint", None, None),
+        ("Chandelure", "switch", None, 100),
+        ("Tinkaton", "move", "Chandelure", None),
+        ("Chandelure", "damage", None, 30),
+    ]
+    with pytest.raises(ReplayFormatError, match="'p1: Ghost' could be any of Gengar, Chandelure"):
+        battle_events.parse(
+            [*log.splitlines(), "|-heal|p1: Ghost|50/100|[from] move: Revival Blessing"],
+            team, REPLAY_ID, battle_log.EVENT_TYPES,
+        )  # fmt: skip
+
+
 def test_weather_and_field_events_have_no_pokemon():
     events = parse(
         OPENING
@@ -266,6 +334,8 @@ def test_weather_and_field_events_have_no_pokemon():
         ("|-heal|p1a: Ghostly|50/100", "-heal takes p1 Gengar from 100 to 50"),
         ("|-damage|p1a: Ghostly|150/300", "unexpected HP '150/300'"),
         ("|replace|p1a: Ghostly|Gengar, M", "p1 Gengar is revealed but wasn't disguised"),
+        ("|switch|p1a: Ghostly|Clefable, F|100/100", "enters as Clefable, which isn't one previewed Pokémon"),
+        ("|-sethp|p1a: Ghostly|60/100|p2a: Tinkaton|60/100", "-sethp line with 4 arguments"),
     ],
 )
 def test_parse_rejects_events_that_dont_add_up(lines, message):

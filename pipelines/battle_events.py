@@ -7,20 +7,26 @@ reads is poisoning on switch-in, which the log doesn't attribute, from Toxic Spi
 A Pokémon with Illusion (Zoroark) enters disguised as another on its team, and the log names it as that Pokémon until
 a `replace` line reveals it. The reveal states who it was all along, so the events since it switched in are credited
 to it then. A disguise that's never revealed leaves its events with the Pokémon it impersonated, as the log states.
+
+Teammates can share a nickname, so a Pokémon entering is told apart by the species the log shows, and a reference with a
+position ("p1a: Name") is the active Pokémon. A reference without one ("p1: Name") to a shared nickname raises.
 """
 
 import dataclasses
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from pipelines.replays import ReplayFormatError
 
-POKEMON = re.compile(r"^(?P<side>p[12])[a-z]?: (?P<nickname>.+)$")
+POKEMON = re.compile(r"^(?P<side>p[12])(?P<position>[a-z]?): (?P<nickname>.+)$")
 TAG = re.compile(r"^\[(?P<name>[a-z]+)\] ?(?P<value>.*)$")
 # Prefixes that only say what kind of effect a name is, e.g. "move: Toxic Spikes".
 PREFIXES = ("move: ", "ability: ", "item: ")
 # Lines that end the current move's effects: the blank line before end-of-turn effects, and the next turn.
 MOVE_ENDS = {"", "upkeep", "turn"}
+# Event names for lines whose second argument is the Pokémon they affect.
+TARGETED = {"-miss": "miss", "-transform": "transform", "-copyboost": "copy boosts", "-swapboost": "swap boosts"}
 # Event names for lines that need no special handling: the event name, and whether the first argument is a Pokémon.
 SIMPLE = {
     "-curestatus": ("cure status", True),
@@ -48,6 +54,10 @@ SIMPLE = {
     "-fail": ("fail", True),
     "-terastallize": ("terastallize", True),
     "-mega": ("mega", True),
+    "-invertboost": ("invert boosts", True),
+    "-block": ("block", True),
+    "-endability": ("ability suppressed", True),
+    "-nothing": ("nothing", False),
     "cant": ("cant", True),
 }
 
@@ -72,8 +82,8 @@ class Event:
 
 
 class _Parser:
-    def __init__(self, team: dict[tuple[str, str], str], replay_id: str):
-        self.team = team  # (side, nickname) -> previewed species
+    def __init__(self, team: dict[tuple[str, str], tuple[str, ...]], replay_id: str):
+        self.team = team  # (side, nickname) -> the previewed species with that nickname
         self.replay_id = replay_id
         self.events: list[Event] = []
         self.turn = 0
@@ -83,7 +93,7 @@ class _Parser:
         self.entering: dict[str, str] = {}  # side -> Pokémon that switched in, until the next move or turn end
         # side -> the active Pokémon's switch-in seq, and its HP before then, in case Illusion was disguising it
         self.switched_in: dict[str, tuple[int, int | None]] = {}
-        self.active: dict[str, str] = {}  # side -> the active Pokémon, as the log names it
+        self.active: dict[str, str] = {}  # side -> the active Pokémon, as the log names it (Illusion's disguise)
 
     def error(self, message: str) -> ReplayFormatError:
         return ReplayFormatError(f"{self.replay_id} turn {self.turn}: {message}")
@@ -92,7 +102,23 @@ class _Parser:
         match = POKEMON.match(ref)
         if not match or (match["side"], match["nickname"]) not in self.team:
             raise self.error(f"unknown Pokémon {ref!r}")
-        return match["side"], self.team[(match["side"], match["nickname"])]
+        side, species = match["side"], self.team[(match["side"], match["nickname"])]
+        if len(species) == 1:
+            return side, species[0]
+        if match["position"] and self.active.get(side) in species:
+            return side, self.active[side]
+        raise self.error(f"{ref!r} could be any of {', '.join(species)}")
+
+    def entered(self, ref: str, details: str) -> tuple[str, str]:
+        """The Pokémon that switches in or is revealed, told apart from teammates sharing its nickname by species."""
+        match = POKEMON.match(ref)
+        if not match or (match["side"], match["nickname"]) not in self.team:
+            raise self.error(f"unknown Pokémon {ref!r}")
+        side, candidates, shown = match["side"], self.team[(match["side"], match["nickname"])], _species(details)
+        matches = [shown] if shown in candidates else [c for c in candidates if same_species(c, shown)]
+        if len(matches) != 1:
+            raise self.error(f"{ref!r} enters as {shown}, which isn't one previewed Pokémon")
+        return side, matches[0]
 
     def add(self, line: str, side: str | None, pokemon: str | None, event: str, **values) -> int:
         values.setdefault("caused_by_seq", self.move)
@@ -145,7 +171,7 @@ class _Parser:
                 source=self.source(tags),
             )  # fmt: skip
         elif kind in ("switch", "drag"):
-            side, pokemon = self.pokemon(args[0])
+            side, pokemon = self.entered(args[0], args[1])
             hp_before = self.hp.get((side, pokemon))
             self.hp[(side, pokemon)] = self.hp_value(args[2])
             self.entering[side] = pokemon
@@ -186,11 +212,12 @@ class _Parser:
         elif kind == "-swapsideconditions":
             self.conditions = {"p1": self.conditions["p2"], "p2": self.conditions["p1"]}
             self.add(line, None, None, "swap side conditions")
-        elif kind in ("-miss", "-transform"):
+        elif kind in TARGETED:
             side, pokemon = self.pokemon(args[0])
             target = self.pokemon(args[1]) if len(args) > 1 and args[1] else (None, None)
-            self.add(line, side, pokemon, kind[1:], target_side=target[0], target_pokemon=target[1],
-                     source=self.source(tags))  # fmt: skip
+            detail = args[2] if len(args) > 2 else None  # The stats Power Swap and Guard Swap exchange.
+            self.add(line, side, pokemon, TARGETED[kind], detail=detail, target_side=target[0],
+                     target_pokemon=target[1], source=self.source(tags))  # fmt: skip
         elif kind in SIMPLE:
             event, has_pokemon = SIMPLE[kind]
             side, pokemon = self.pokemon(args[0]) if has_pokemon else (None, None)
@@ -204,7 +231,7 @@ class _Parser:
 
     def reveal(self, line: str, args: list[str], tags: dict[str, str]) -> None:
         """Credits the events since the disguised switch-in to the Pokémon an Illusion was hiding."""
-        side, pokemon = self.pokemon(args[0])
+        side, pokemon = self.entered(args[0], args[1])
         if side not in self.switched_in:
             raise self.error(f"{side} {pokemon} is revealed before anything switched in")
         disguise = self.active[side]
@@ -228,6 +255,8 @@ class _Parser:
         self.add(line, side, pokemon, "replace", detail=_species(args[1]), source=self.source(tags))
 
     def hp_line(self, line: str, kind: str, args: list[str], tags: dict[str, str]) -> None:
+        if len(args) != 2:  # One Pokémon per line; Pain Split writes a line for each.
+            raise self.error(f"{kind} line with {len(args)} arguments")
         side, pokemon = self.pokemon(args[0])
         before, after = self.change_hp((side, pokemon), args[1])
         if (kind == "-damage" and after > before) or (kind == "-heal" and after < before):
@@ -254,7 +283,9 @@ class _Parser:
         self.add(line, side, pokemon, "status", **values)
 
 
-def parse(lines: list[str], team: dict[tuple[str, str], str], replay_id: str, event_types: set[str]) -> tuple:
+def parse(
+    lines: Sequence[str], team: dict[tuple[str, str], tuple[str, ...]], replay_id: str, event_types: set[str]
+) -> tuple[Event, ...]:
     """Parses the lines whose type is in `event_types`, and the turn and move boundaries between them."""
     parser = _Parser(team, replay_id)
     for line in lines:
@@ -263,6 +294,16 @@ def parse(lines: list[str], team: dict[tuple[str, str], str], replay_id: str, ev
         if kind in event_types or kind in MOVE_ENDS:
             parser.line(line)
     return tuple(parser.events)
+
+
+def same_species(previewed: str, entered: str) -> bool:
+    """True if a Pokémon that entered as `entered` is the one previewed as `previewed`.
+
+    It can enter in another form (Terapagos as Terapagos-Terastal, a hit Mimikyu as Mimikyu-Busted), and preview
+    hides some forms ("Urshifu-*"). Species Clause allows one Pokémon per base species, so matching it is unambiguous.
+    """
+    base = previewed.removesuffix("-*")
+    return entered == base or entered.startswith(f"{base}-")
 
 
 def _clean(name: str) -> str:

@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from pipelines import battle_events
-from pipelines.battle_events import Event
+from pipelines.battle_events import Event, same_species
 from pipelines.replays import ReplayFormatError
 
 # Lines that describe the battle as a whole.
@@ -26,7 +26,8 @@ EVENT_TYPES = {
     "-weather", "-fieldstart", "-fieldend", "-fieldactivate", "-sidestart", "-sideend", "-swapsideconditions",
     "-start", "-end", "-ability", "-item", "-enditem", "-activate", "-singleturn", "-singlemove", "-prepare",
     "-mustrecharge", "-hitcount", "-crit", "-supereffective", "-resisted", "-immune", "-miss", "-fail",
-    "-formechange", "-transform", "-terastallize", "-mega",
+    "-formechange", "-transform", "-terastallize", "-mega", "-copyboost", "-swapboost", "-invertboost", "-block",
+    "-endability", "-nothing",
 }  # fmt: skip
 # Chat, joins and leaves, timers, and display-only lines; they stay in raw.replay.log.
 SKIPPED_TYPES = {"j", "l", "n", "c", "html", "uhtml", "badge", "inactive", "inactiveoff", "-hint", "-anim"}
@@ -139,7 +140,11 @@ def parse(log: str, replay_id: str) -> Battle:
         for side in SIDES
         for slot, species in enumerate(preview[side], start=1)
     )
-    nicknames = {(pokemon.side, pokemon.nickname): pokemon.species for pokemon in team if pokemon.nickname}
+    nicknames: dict[tuple[str, str], tuple[str, ...]] = {}
+    for pokemon in team:
+        if pokemon.nickname:
+            key = (pokemon.side, pokemon.nickname)
+            nicknames[key] = (*nicknames.get(key, ()), pokemon.species)
     return Battle(
         replay_id=replay_id,
         rated=rated,
@@ -197,20 +202,10 @@ def _nickname(lines: list[list[str]], side: str, species: str, team: list[str]) 
                 match
                 and match["side"] == side
                 and (entered == species or entered not in team)
-                and _same_species(species, entered)
+                and same_species(species, entered)
             ):
                 return match["nickname"]
     return None
-
-
-def _same_species(previewed: str, entered: str) -> bool:
-    """True if a Pokémon that entered as `entered` is the one previewed as `previewed`.
-
-    It can enter in another form (Terapagos as Terapagos-Terastal, a hit Mimikyu as Mimikyu-Busted), and preview
-    hides some forms ("Urshifu-*"). Species Clause allows one Pokémon per base species, so matching it is unambiguous.
-    """
-    base = previewed.removesuffix("-*")
-    return entered == base or entered.startswith(f"{base}-")
 
 
 def _side(value: str, replay_id: str) -> str:
