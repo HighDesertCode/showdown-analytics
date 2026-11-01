@@ -128,6 +128,25 @@ def test_a_fainted_pokemon_can_be_revived():
     assert rows(events[-1:], "event", "healed_percent", "hp_after_percent", "caused_by_seq") == [("heal", 50, 50, 5)]
 
 
+def test_hp_at_a_health_bar_boundary_keeps_its_color_in_the_log_line():
+    # From gen9monotype-2594111169: Surging Strikes takes Tauros to just over half.
+    events = parse(
+        OPENING
+        + """|move|p2a: Tinkaton|Surging Strikes|p1a: Ghostly
+|-damage|p1a: Ghostly|75/100
+|-damage|p1a: Ghostly|50/100g
+|-damage|p1a: Ghostly|50/100y
+|-damage|p1a: Ghostly|20/100r tox
+"""
+    )
+
+    assert rows(events[-3:], "damage_percent", "hp_after_percent", "log_line") == [
+        (25, 50, "|-damage|p1a: Ghostly|50/100g"),
+        (None, 50, "|-damage|p1a: Ghostly|50/100y"),
+        (30, 20, "|-damage|p1a: Ghostly|20/100r tox"),
+    ]
+
+
 def test_a_damage_line_that_changes_nothing_is_kept():
     events = parse(OPENING + "|move|p2a: Tinkaton|Play Rough|p1a: Ghostly\n|-damage|p1a: Ghostly|100/100\n")
 
@@ -333,6 +352,8 @@ def test_weather_and_field_events_have_no_pokemon():
         ("|-damage|p1a: Ghostly|50/100\n|-damage|p1a: Ghostly|60/100", "-damage takes p1 Gengar from 50 to 60"),
         ("|-heal|p1a: Ghostly|50/100", "-heal takes p1 Gengar from 100 to 50"),
         ("|-damage|p1a: Ghostly|150/300", "unexpected HP '150/300'"),
+        ("|-damage|p1a: Ghostly|40/100g", "unexpected HP '40/100g'"),
+        ("|-damage|p1a: Ghostly|50/100r", "unexpected HP '50/100r'"),
         ("|replace|p1a: Ghostly|Gengar, M", "p1 Gengar is revealed but wasn't disguised"),
         ("|switch|p1a: Ghostly|Clefable, F|100/100", "enters as Clefable, which isn't one previewed Pokémon"),
         ("|-sethp|p1a: Ghostly|60/100|p2a: Tinkaton|60/100", "-sethp line with 4 arguments"),
