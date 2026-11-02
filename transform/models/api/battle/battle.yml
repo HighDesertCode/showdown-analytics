@@ -129,7 +129,7 @@ models:
         description: Null if it never switched in.
         data_type: text
       - name: parsed_at
-        description: When the battle was last parsed; incremental builds add battles parsed after the latest one here.
+        description: When the battle was last parsed; incremental builds add every battle whose current parse isn't here.
         data_type: timestamp with time zone
         constraints: [{type: not_null}]
 
@@ -143,6 +143,9 @@ models:
     constraints:
       - type: primary_key
         columns: [replay_id, seq]
+      # Checked as rows are inserted, so the full table never needs scanning.
+      - type: check
+        expression: "(pokemon IS NULL OR species_id IS NOT NULL) AND (target_pokemon IS NULL OR target_species_id IS NOT NULL)"
     columns:
       - name: replay_id
         data_type: text
@@ -157,9 +160,13 @@ models:
         description: The side of the Pokémon acting or affected; null for field events such as weather.
         data_type: text
       - name: pokemon
-        description: The species name as it entered the battle, e.g. Urshifu-Rapid-Strike.
+        description: The species as shown at team preview, e.g. Urshifu-*, so events join to replay_battle_pokemon.
         data_type: text
       - name: species_id
+        description: >
+          The form the Pokémon is in at this event, e.g. Urshifu-Rapid-Strike or Mimikyu-Busted: the last form it
+          showed by switching in, being dragged in, an Illusion ending, or changing form. A Zoroark still disguised
+          keeps its own previewed species.
         data_type: bigint
       - name: event
         description: What happened, e.g. move, damage, switch, or side start.
@@ -173,6 +180,7 @@ models:
       - name: target_pokemon
         data_type: text
       - name: target_species_id
+        description: The form the target is in at this event, worked out like species_id.
         data_type: bigint
       - name: damage_percent
         description: HP lost, as a percent of max HP.
@@ -193,6 +201,6 @@ models:
         data_type: boolean
         constraints: [{type: not_null}]
       - name: parsed_at
-        description: When the battle was last parsed; incremental builds add battles parsed after the latest one here.
+        description: When the battle was last parsed; incremental builds add every battle whose current parse isn't here.
         data_type: timestamp with time zone
         constraints: [{type: not_null}]

@@ -1,30 +1,19 @@
--- One row per game event, with its Pokémon and target matched to reference.species the way the battle's
--- Pokémon are (a cosmetic form such as "Vivillon-Tundra" matches its base species). The log line is left out.
+-- One row per game event, without the log line. pokemon and target_pokemon are the species shown at team preview,
+-- so they join to stg_battle_pokemon; replay_battle_event works out the form each one is in.
 SELECT
-    event.replay_id,
-    event.seq,
-    event.turn,
-    event.side,
-    event.pokemon,
-    COALESCE(species.species_id, base_species.species_id) AS species_id,
-    event.event,
-    event.detail,
-    event.target_side,
-    event.target_pokemon,
-    COALESCE(target_species.species_id, target_base_species.species_id) AS target_species_id,
-    event.damage_percent,
-    event.hp_after_percent,
-    event.healed_percent,
-    event.caused_by_seq,
-    event.source,
-    event.source_inferred
-FROM {{ source('raw', 'battle_event') }} AS event
-LEFT JOIN {{ source('reference', 'species') }} AS species ON species.showdown_id = {{ to_id('event.pokemon') }}
-LEFT JOIN {{ source('reference', 'species') }} AS base_species
-    ON species.species_id IS NULL
-    AND base_species.showdown_id = {{ to_id("SPLIT_PART(event.pokemon, '-', 1)") }}
-LEFT JOIN {{ source('reference', 'species') }} AS target_species
-    ON target_species.showdown_id = {{ to_id('event.target_pokemon') }}
-LEFT JOIN {{ source('reference', 'species') }} AS target_base_species
-    ON target_species.species_id IS NULL
-    AND target_base_species.showdown_id = {{ to_id("SPLIT_PART(event.target_pokemon, '-', 1)") }}
+    replay_id,
+    seq,
+    turn,
+    side,
+    pokemon,
+    event,
+    detail,
+    target_side,
+    target_pokemon,
+    damage_percent,
+    hp_after_percent,
+    healed_percent,
+    caused_by_seq,
+    source,
+    source_inferred
+FROM {{ source('raw', 'battle_event') }}

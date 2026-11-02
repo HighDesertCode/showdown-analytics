@@ -370,9 +370,9 @@ A few values differ from how Smogon prints them:
 
 ### Replay Statistics
 
-The replay tables are built from the parsed battles in `raw`, and kept apart from Smogon's statistics: they describe a sample of the battles players chose to upload, not the whole ladder. Staging matches every Pokémon to `reference.species` (a form team preview hides, such as `Urshifu-*`, matches its base species and is flagged) and infers each team's type as the one type all six previewed Pokémon share; teams sharing none (some unrated challenges drop the Same Type Clause) or more than one have no type. Battles belong to the UTC month they started in.
+The replay tables are built from the parsed battles in `raw`, and kept apart from Smogon's statistics: they describe a sample of the battles players chose to upload, not the whole ladder. Staging matches every previewed Pokémon to `reference.species` (a form team preview hides, such as `Urshifu-*`, matches its base species and is flagged) and infers each team's type as the one type all six previewed Pokémon share; teams sharing none (some unrated challenges drop the Same Type Clause) or more than one have no type. Battles belong to the UTC month they started in.
 
-Four tables publish each battle in full, so it can be followed turn by turn. The two large ones are incremental: a build adds only battles parsed since the last one and replaces every row of a re-parsed battle, so a change to their logic needs `dbt build --full-refresh`. Each has a primary key, which also makes reading one battle fast.
+Four tables publish each battle in full, so it can be followed turn by turn. Events carry the species of the form each Pokémon is in, such as Urshifu-Rapid-Strike or Mimikyu-Busted, from the last form it showed. The two large tables are incremental: a build adds every battle whose current parse isn't in them yet and replaces every row of a re-parsed battle, so a change to their logic needs `dbt build --full-refresh`. Each has a primary key, which also makes reading one battle fast.
 
 | Table | Contents |
 | --- | --- |
