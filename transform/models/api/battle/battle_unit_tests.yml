@@ -10,10 +10,12 @@ unit_tests:
       macros:
         is_incremental: true
     given:
+      # The table may not exist yet when unit tests run, so dbt can't read its columns; SQL needs none.
       - input: this
-        rows:
-          - {replay_id: a, seq: 1, parsed_at: "2026-11-01 09:00:00+00"}
-          - {replay_id: b, seq: 1, parsed_at: "2026-11-01 09:00:00+00"}
+        format: sql
+        rows: |
+          SELECT replay_id, parsed_at::TIMESTAMPTZ AS parsed_at
+          FROM (VALUES ('a', '2026-11-01 09:00:00+00'), ('b', '2026-11-01 09:00:00+00')) AS event (replay_id, parsed_at)
       - input: ref('stg_battle_event')
         rows:
           - {replay_id: a, seq: 1}
@@ -44,7 +46,9 @@ unit_tests:
         is_incremental: true
     given:
       - input: this
-        rows: []
+        format: sql
+        rows: |
+          SELECT NULL::TIMESTAMPTZ AS parsed_at WHERE FALSE
       - input: ref('stg_battle_event')
         rows:
           - {replay_id: a, seq: 1}
