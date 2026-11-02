@@ -21,7 +21,7 @@ class FakeConnection:
     def __exit__(self, *exc):
         return False
 
-    def execute(self, query):
+    def execute(self, query, params=None):
         return self
 
     def fetchone(self):
@@ -553,3 +553,148 @@ def test_parse_replays_command(monkeypatch, arguments, reparse):
     cli.main()
 
     assert calls == [reparse]
+
+
+class FakeLockConnection(FakeConnection):
+    """Records the dbt lock taken and released, and whether it was free."""
+
+    def __init__(self, calls, free=True):
+        super().__init__()
+        self.calls, self.free, self.result = calls, free, None
+
+    def __exit__(self, *exc):
+        self.calls.append("unlock")
+        return False
+
+    def execute(self, query, params=None):
+        if "PG_TRY_ADVISORY_LOCK" in query:
+            self.result = (self.free,)
+            if self.free:
+                self.calls.append("lock")
+        elif "PG_ADVISORY_LOCK" in query:
+            # Blocks until the other build releases it.
+            self.calls.extend(["waited", "lock"])
+        return self
+
+    def fetchone(self):
+        return self.result
+
+
+def fake_update_replays(
+    monkeypatch, loaded=("gen9monotype-3",), unparsed=None, failed=(), rejected=(), dbt_statuses=(0, 0), free=True
+):
+    """Fakes update_replays's collection, parse, lock, and dbt calls; returns the calls made, in order."""
+    calls = []
+    statuses = list(dbt_statuses)
+    connections = iter([FakeConnection(), FakeLockConnection(calls, free)])
+
+    def collect(start, end):
+        calls.append(("collect", start, end))
+        return list(loaded), list(failed)
+
+    def parse(replay_ids, reparse=False):
+        calls.append(("parse", replay_ids))
+        return list(rejected)
+
+    def run(command, check):
+        calls.append(("dbt", command[command.index("--select") + 1 : command.index("--project-dir")]))
+        return subprocess.CompletedProcess(command, statuses.pop(0))
+
+    monkeypatch.setattr(cli.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(cli, "collect", collect)
+    monkeypatch.setattr(cli.db, "connect", lambda: next(connections))
+    monkeypatch.setattr(cli.battle, "unparsed_ids", lambda conn: list(loaded if unparsed is None else unparsed))
+    monkeypatch.setattr(cli, "parse", parse)
+    monkeypatch.setattr(cli.subprocess, "run", run)
+    return calls
+
+
+STAGING = ["path:models/staging/stg_battle*"]
+API = ["path:models/api/battle", "path:models/api/replay"]
+
+
+def test_update_replays_parses_every_unparsed_replay_and_builds_only_the_replay_models(monkeypatch):
+    # gen9monotype-1 was stored by a run that stopped before parsing it.
+    calls = fake_update_replays(monkeypatch, unparsed=["gen9monotype-1", "gen9monotype-3"])
+
+    cli.update_replays()
+
+    assert calls == [
+        ("collect", None, None),
+        ("parse", ["gen9monotype-1", "gen9monotype-3"]),
+        "lock",
+        ("dbt", STAGING),
+        ("dbt", API),
+        "unlock",
+    ]
+
+
+def test_update_replays_lists_new_rejections_and_counts_earlier_ones(monkeypatch, capsys):
+    rejected = [
+        ("gen9monotype-1", ReplayFormatError("gen9monotype-1 previews Koraidon more than once for p1")),
+        ("gen9monotype-3", ReplayFormatError("gen9monotype-3 has an unknown line type 'error'")),
+    ]
+    calls = fake_update_replays(monkeypatch, unparsed=["gen9monotype-1", "gen9monotype-3"], rejected=rejected)
+
+    cli.update_replays()
+
+    assert calls[-2:] == [("dbt", API), "unlock"]
+    assert capsys.readouterr().out == (
+        "\n1 new replays couldn't be parsed and were left out:\n"
+        "  gen9monotype-3: gen9monotype-3 has an unknown line type 'error'\n"
+        "1 replays stored before this run still couldn't be parsed\n"
+    )
+
+
+def test_update_replays_waits_for_another_dbt_build(monkeypatch, capsys):
+    calls = fake_update_replays(monkeypatch, free=False)
+
+    cli.update_replays()
+
+    assert calls[2:] == ["waited", "lock", ("dbt", STAGING), ("dbt", API), "unlock"]
+    assert capsys.readouterr().out == "Waiting for another dbt build to finish\n"
+
+
+def test_update_replays_builds_then_fails_after_failed_downloads(monkeypatch, capsys):
+    failed = [("gen9monotype-4", ReplayFormatError("gen9monotype-4 is not public"))]
+    calls = fake_update_replays(monkeypatch, failed=failed)
+
+    with pytest.raises(SystemExit) as exit_info:
+        cli.update_replays()
+
+    assert exit_info.value.code == 1
+    assert calls[-2:] == [("dbt", API), "unlock"]
+    assert capsys.readouterr().err == (
+        "\n1 replays failed to download; collect their window again to retry them:\n"
+        "  gen9monotype-4: gen9monotype-4 is not public\n"
+    )
+
+
+def test_update_replays_skips_api_and_releases_the_lock_when_staging_fails(monkeypatch):
+    calls = fake_update_replays(monkeypatch, dbt_statuses=(1,))
+
+    with pytest.raises(SystemExit) as exit_info:
+        cli.update_replays()
+
+    assert exit_info.value.code == 1
+    assert calls[-2:] == [("dbt", STAGING), "unlock"]
+
+
+def test_update_replays_requires_dbt_before_collecting(monkeypatch):
+    calls = fake_update_replays(monkeypatch)
+    monkeypatch.setattr(cli.shutil, "which", lambda name: None)
+
+    with pytest.raises(RuntimeError, match="dbt is not installed"):
+        cli.update_replays()
+
+    assert calls == []
+
+
+def test_update_replays_command(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "update_replays", lambda: calls.append("update"))
+    monkeypatch.setattr("sys.argv", ["pipelines", "update-replays"])
+
+    cli.main()
+
+    assert calls == ["update"]

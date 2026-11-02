@@ -305,7 +305,7 @@ The battle tables hold only what the log states, plus the inferences the parser 
 
 ## Published Statistics
 
-The `staging` and `api` schemas are built with [dbt](https://www.getdbt.com/) from `raw` and `reference` after each monthly load. A scheduled job checks daily for the previous month, loads it once Smogon publishes it, and then runs the build:
+The `staging` and `api` schemas are built with [dbt](https://www.getdbt.com/) from `raw` and `reference`. Two scheduled jobs run the builds: one checks daily for the previous Smogon month, loads it once Smogon publishes it, and then builds everything; the other collects and parses each day's new replays and builds only the replay models. The build has two layers:
 
 - **`staging`** holds views that clean each raw table once: they keep only the latest version of each file, match Smogon's and Showdown's names to `reference` IDs, and flag placeholders such as empty move slots. Tests check that every name matches, nothing is duplicated, and every loaded month and baseline has all 77 files.
 - **`api`** holds the published statistics as tables and the reference data as views. Each model has a contract that fixes its column names, types, and constraints, so a change in Smogon's data fails the build rather than changing what clients see.
