@@ -105,3 +105,112 @@ unit_tests:
         - {team_type: water, tag: monotype, tag_team_type: null, percent: 100.00000}
         - {team_type: water, tag: stall, tag_team_type: null, percent: 69.96818}
         - {team_type: water, tag: rain, tag_team_type: null, percent: 28.11969}
+
+  - name: stg_battle_reports_the_utc_month
+    description: >
+      A battle belongs to the UTC month it started in, so one starting at 23:30 Pacific on October 31 (07:30 UTC on
+      November 1) is a November battle. Its replay page is Showdown's URL for its ID.
+    model: stg_battle
+    given:
+      # The inputs and expected rows are SQL because dbt can't write a typed null for an array column.
+      - input: source('raw', 'battle')
+        format: sql
+        rows: |
+          SELECT
+              replay_id, started_at::TIMESTAMPTZ AS started_at, NULL::BOOLEAN AS rated, NULL::TIMESTAMPTZ AS ended_at,
+              NULL::SMALLINT AS turns, NULL::TEXT AS winner, NULL::TEXT AS ended_by, NULL::TEXT[] AS rules,
+              NULL::TIMESTAMPTZ AS parsed_at
+          FROM (
+              VALUES
+                  ('gen9monotype-2691037303', '2026-10-01 14:11:26+00'),
+                  ('gen9monotype-2703725750', '2026-10-31 23:30:00-08')
+          ) AS battle (replay_id, started_at)
+      - input: source('raw', 'replay')
+        format: sql
+        rows: |
+          SELECT
+              replay_id, 'gen9monotype' AS format_id, NULL::TEXT AS format, NULL::TEXT[] AS players,
+              NULL::INTEGER AS rating, NULL::TIMESTAMPTZ AS uploaded_at, NULL::TEXT AS log,
+              NULL::TIMESTAMPTZ AS retrieved_at
+          FROM (VALUES ('gen9monotype-2691037303'), ('gen9monotype-2703725750')) AS replay (replay_id)
+    expect:
+      format: sql
+      rows: |
+        SELECT
+            replay_id, 'gen9monotype' AS format, report_month::DATE AS report_month,
+            'https://replay.pokemonshowdown.com/' || replay_id AS replay_url, NULL::BOOLEAN AS rated,
+            started_at::TIMESTAMPTZ AS started_at, NULL::TIMESTAMPTZ AS ended_at, NULL::SMALLINT AS turns,
+            NULL::TEXT AS winner, NULL::TEXT AS ended_by, NULL::TEXT[] AS rules, NULL::TIMESTAMPTZ AS uploaded_at,
+            NULL::TIMESTAMPTZ AS parsed_at
+        FROM (
+            VALUES
+                ('gen9monotype-2691037303', '2026-10-01', '2026-10-01 14:11:26+00'),
+                ('gen9monotype-2703725750', '2026-11-01', '2026-10-31 23:30:00-08')
+        ) AS battle (replay_id, report_month, started_at)
+
+  - name: stg_battle_pokemon_matches_hidden_and_cosmetic_forms
+    description: >
+      A hidden form ("Urshifu-*") matches its base species and is flagged; a cosmetic form missing from
+      reference.species ("Gastrodon-East") matches its base species; a hyphenated name that is listed ("Ting-Lu")
+      matches itself, not "Ting".
+    model: stg_battle_pokemon
+    given:
+      - input: source('raw', 'battle_pokemon')
+        rows:
+          - {replay_id: a, side: p1, slot: 1, species: "Urshifu-*"}
+          - {replay_id: a, side: p1, slot: 2, species: Gastrodon-East}
+          - {replay_id: a, side: p1, slot: 3, species: Ting-Lu}
+      - input: source('reference', 'species')
+        rows:
+          - {species_id: 1, showdown_id: urshifu}
+          - {species_id: 2, showdown_id: gastrodon}
+          - {species_id: 3, showdown_id: tinglu}
+          - {species_id: 4, showdown_id: ting}
+    expect:
+      rows:
+        - {slot: 1, species_id: 1, form_hidden: true}
+        - {slot: 2, species_id: 2, form_hidden: false}
+        - {slot: 3, species_id: 3, form_hidden: false}
+
+  - name: stg_battle_side_infers_team_types_and_elo_bands
+    description: >
+      A team's type is the one type all its Pokémon share. Urshifu-* could be Dark or Water, so it fits a Dark team
+      (a). A team sharing two types (all Fire/Ghost) or one with an unmatched Pokémon gets null. Elo bands start at
+      1000, 1200, 1400, and 1600, and are null when the battle is unrated.
+    model: stg_battle_side
+    given:
+      - input: source('raw', 'battle_side')
+        rows:
+          - {replay_id: a, side: p1, elo_before: 1199}
+          - {replay_id: a, side: p2, elo_before: 1200}
+          - {replay_id: b, side: p1, elo_before: 1599}
+          - {replay_id: b, side: p2, elo_before: 1600}
+          - {replay_id: c, side: p1, elo_before: null}
+      - input: ref('stg_battle_pokemon')
+        rows:
+          - {replay_id: a, side: p1, slot: 1, species_id: 1, form_hidden: true}
+          - {replay_id: a, side: p1, slot: 2, species_id: 3, form_hidden: false}
+          - {replay_id: a, side: p2, slot: 1, species_id: 4, form_hidden: false}
+          - {replay_id: a, side: p2, slot: 2, species_id: 5, form_hidden: false}
+          - {replay_id: b, side: p1, slot: 1, species_id: null, form_hidden: false}
+          - {replay_id: b, side: p1, slot: 2, species_id: 3, form_hidden: false}
+          - {replay_id: b, side: p2, slot: 1, species_id: 6, form_hidden: false}
+          - {replay_id: b, side: p2, slot: 2, species_id: 3, form_hidden: false}
+      - input: source('reference', 'species')
+        rows:
+          - {species_id: 1, name: Urshifu, base_species: null, type_1_id: 2, type_2_id: 16}
+          - {species_id: 2, name: Urshifu-Rapid-Strike, base_species: Urshifu, type_1_id: 2, type_2_id: 11}
+          - {species_id: 3, name: Ting-Lu, base_species: null, type_1_id: 16, type_2_id: 9}
+          - {species_id: 4, name: Chandelure, base_species: null, type_1_id: 8, type_2_id: 10}
+          - {species_id: 5, name: Skeledirge, base_species: null, type_1_id: 10, type_2_id: 8}
+          - {species_id: 6, name: Kingambit, base_species: null, type_1_id: 16, type_2_id: 17}
+      - input: source('reference', 'type')
+        rows:
+          - {type_id: 16, showdown_id: dark}
+    expect:
+      rows:
+        - {replay_id: a, side: p1, elo_band: 1000, team_type_id: 16, team_type: dark}
+        - {replay_id: a, side: p2, elo_band: 1200, team_type_id: null, team_type: null}
+        - {replay_id: b, side: p1, elo_band: 1400, team_type_id: null, team_type: null}
+        - {replay_id: b, side: p2, elo_band: 1600, team_type_id: 16, team_type: dark}
+        - {replay_id: c, side: p1, elo_band: null, team_type_id: null, team_type: null}

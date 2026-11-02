@@ -1,0 +1,133 @@
+# Unit tests: fixed input rows and the exact rows each model should return. They need no loaded data,
+# so CI runs them against empty tables. Only the columns a test depends on are listed. Rows follow
+# gen9monotype-2691037303, where an Ice team (Elo 1373) beat a Dark team (Elo 1345) in October 2026.
+unit_tests:
+  - name: replay_type_matchup_counts_each_side_and_nulls_mirrors
+    description: >
+      Each rated battle counts once from each team's side (Ice beat Dark: ice-dark 1 win, dark-ice 0). A tie counts
+      as a battle but not a win, a mirror's win_rate is null, and unrated battles and untyped teams are left out.
+    model: replay_type_matchup
+    given:
+      - input: ref('replay_battle_side')
+        rows:
+          - {replay_id: a, side: p1, elo_band: 1200, result: loss, team_type_id: 16}
+          - {replay_id: a, side: p2, elo_band: 1200, result: win, team_type_id: 15}
+          - {replay_id: b, side: p1, elo_band: 1200, result: tie, team_type_id: 15}
+          - {replay_id: b, side: p2, elo_band: 1200, result: tie, team_type_id: 16}
+          - {replay_id: c, side: p1, elo_band: 1200, result: win, team_type_id: 15}
+          - {replay_id: c, side: p2, elo_band: 1200, result: loss, team_type_id: 15}
+          - {replay_id: d, side: p1, elo_band: 1200, result: win, team_type_id: 15}
+          - {replay_id: d, side: p2, elo_band: 1200, result: loss, team_type_id: null}
+          - {replay_id: e, side: p1, elo_band: null, result: win, team_type_id: 15}
+          - {replay_id: e, side: p2, elo_band: null, result: loss, team_type_id: 16}
+      - input: ref('replay_battle')
+        format: sql
+        rows: |
+          SELECT replay_id, 'gen9monotype' AS format, '2026-10-01'::DATE AS report_month, rated
+          FROM (VALUES ('a', TRUE), ('b', TRUE), ('c', TRUE), ('d', TRUE), ('e', FALSE)) AS battle (replay_id, rated)
+      - input: source('reference', 'type')
+        rows:
+          - {type_id: 15, showdown_id: ice, name: Ice}
+          - {type_id: 16, showdown_id: dark, name: Dark}
+    expect:
+      rows:
+        - {type: dark, opponent_type: ice, is_mirror: false, battle_count: 2, win_count: 0, tie_count: 1, win_rate: 0}
+        - {type: ice, opponent_type: dark, is_mirror: false, battle_count: 2, win_count: 1, tie_count: 1, win_rate: 0.5}
+        - {type: ice, opponent_type: ice, is_mirror: true, battle_count: 2, win_count: 1, tie_count: 0, win_rate: null}
+
+  - name: replay_lead_takes_each_sides_first_switch
+    description: >
+      A lead is each side's first switch-in before turn 1; later switches don't count. lead_share divides by the
+      teams of that type and band that led, so a team forfeiting at preview (no switch) is left out.
+    model: replay_lead
+    given:
+      - input: ref('replay_battle_event')
+        rows:
+          - {replay_id: a, seq: 1, turn: 0, side: p1, event: switch, species_id: 2}
+          - {replay_id: a, seq: 2, turn: 0, side: p2, event: switch, species_id: 1}
+          - {replay_id: a, seq: 9, turn: 1, side: p1, event: switch, species_id: 3}
+          - {replay_id: b, seq: 1, turn: 0, side: p1, event: switch, species_id: 3}
+          - {replay_id: c, seq: 1, turn: 0, side: p1, event: switch, species_id: 3}
+      - input: ref('replay_battle_side')
+        rows:
+          - {replay_id: a, side: p1, elo_band: 1200, team_type: dark, result: loss}
+          - {replay_id: a, side: p2, elo_band: 1200, team_type: ice, result: win}
+          - {replay_id: b, side: p1, elo_band: 1200, team_type: dark, result: win}
+          - {replay_id: c, side: p1, elo_band: 1200, team_type: dark, result: win}
+          - {replay_id: d, side: p1, elo_band: 1200, team_type: dark, result: loss}
+      - input: ref('replay_battle')
+        format: sql
+        rows: |
+          SELECT replay_id, 'gen9monotype' AS format, '2026-10-01'::DATE AS report_month, TRUE AS rated
+          FROM (VALUES ('a'), ('b'), ('c'), ('d')) AS battle (replay_id)
+      - input: source('reference', 'species')
+        rows:
+          - {species_id: 1, showdown_id: mamoswine, name: Mamoswine}
+          - {species_id: 2, showdown_id: samurotthisui, name: Samurott-Hisui}
+          - {species_id: 3, showdown_id: tinglu, name: Ting-Lu}
+    expect:
+      rows:
+        - {team_type: dark, species: samurotthisui, lead_count: 1, team_count: 3, lead_share: 0.3333333333, win_count: 0, win_rate: 0}
+        - {team_type: dark, species: tinglu, lead_count: 2, team_count: 3, lead_share: 0.6666666667, win_count: 2, win_rate: 1}
+        - {team_type: ice, species: mamoswine, lead_count: 1, team_count: 1, lead_share: 1, win_count: 1, win_rate: 1}
+
+  - name: replay_move_damage_counts_hits_on_the_opponent
+    description: >
+      Moonblast hit Moltres-Galar for 67 and then 33, its last HP (a knockout), so its mean is 50. Recoil (which has
+      a source) and Belly Drum's cost (damage to the user's own side) are left out.
+    model: replay_move_damage
+    given:
+      - input: ref('replay_battle_event')
+        rows:
+          - {replay_id: a, seq: 48, side: p2, event: move, detail: Moonblast, species_id: 1}
+          - {replay_id: a, seq: 50, side: p1, event: damage, damage_percent: 67, hp_after_percent: 33, caused_by_seq: 48}
+          - {replay_id: a, seq: 54, side: p2, event: move, detail: Moonblast, species_id: 1}
+          - {replay_id: a, seq: 56, side: p1, event: damage, damage_percent: 33, hp_after_percent: 0, caused_by_seq: 54}
+          - {replay_id: a, seq: 60, side: p1, event: move, detail: Flare Blitz, species_id: 2}
+          - {replay_id: a, seq: 61, side: p2, event: damage, damage_percent: 40, hp_after_percent: 60, caused_by_seq: 60}
+          - {replay_id: a, seq: 62, side: p1, event: damage, damage_percent: 13, hp_after_percent: 87, caused_by_seq: 60, source: Recoil}
+          - {replay_id: a, seq: 70, side: p1, event: move, detail: Belly Drum, species_id: 2}
+          - {replay_id: a, seq: 71, side: p1, event: damage, damage_percent: 50, hp_after_percent: 37, caused_by_seq: 70}
+      - input: ref('replay_battle_side')
+        rows:
+          - {replay_id: a, side: p1, elo_band: 1200}
+          - {replay_id: a, side: p2, elo_band: 1200}
+      - input: ref('replay_battle')
+        format: sql
+        rows: |
+          SELECT 'a' AS replay_id, 'gen9monotype' AS format, '2026-10-01'::DATE AS report_month, TRUE AS rated
+      - input: source('reference', 'species')
+        rows:
+          - {species_id: 1, showdown_id: ninetalesalola, name: Ninetales-Alola}
+          - {species_id: 2, showdown_id: charizard, name: Charizard}
+      - input: source('reference', 'move')
+        rows:
+          - {move_id: 10, showdown_id: moonblast, name: Moonblast}
+          - {move_id: 20, showdown_id: flareblitz, name: Flare Blitz}
+          - {move_id: 30, showdown_id: bellydrum, name: Belly Drum}
+    expect:
+      rows:
+        - {species: ninetalesalola, move: moonblast, hit_count: 2, mean_damage_percent: 50, knockout_count: 1}
+        - {species: charizard, move: flareblitz, hit_count: 1, mean_damage_percent: 40, knockout_count: 0}
+
+  - name: replay_hazard_damage_counts_only_stealth_rock_and_spikes
+    description: >
+      Stealth Rock hit Mamoswine (Ice/Ground, neutral) for 12 and Ninetales-Alola (Ice/Fairy, weak) for 25, a mean
+      of 18.5, on the Ice team taking it. Other damage with a source, such as poison, is left out.
+    model: replay_hazard_damage
+    given:
+      - input: ref('replay_battle_event')
+        rows:
+          - {replay_id: a, seq: 62, side: p2, event: damage, damage_percent: 12, hp_after_percent: 88, source: Stealth Rock}
+          - {replay_id: a, seq: 70, side: p2, event: damage, damage_percent: 25, hp_after_percent: 21, source: Stealth Rock}
+          - {replay_id: a, seq: 80, side: p2, event: damage, damage_percent: 12, hp_after_percent: 9, source: psn}
+      - input: ref('replay_battle_side')
+        rows:
+          - {replay_id: a, side: p2, elo_band: 1200, team_type: ice}
+      - input: ref('replay_battle')
+        format: sql
+        rows: |
+          SELECT 'a' AS replay_id, 'gen9monotype' AS format, '2026-10-01'::DATE AS report_month, TRUE AS rated
+    expect:
+      rows:
+        - {team_type: ice, hazard: Stealth Rock, hit_count: 2, mean_damage_percent: 18.5, knockout_count: 0}

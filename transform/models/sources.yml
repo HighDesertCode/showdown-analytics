@@ -1,4 +1,4 @@
-# Tables dbt reads but does not build: reference (loaded from Showdown) and raw (loaded from Smogon).
+# Tables dbt reads but does not build: reference (loaded from Showdown) and raw (loaded from Smogon and Showdown).
 sources:
   - name: reference
     tables:
@@ -24,3 +24,8 @@ sources:
       - name: matchup_chart_report
       - name: matchup_chart_cell
       - name: matchup_chart_viability
+      - name: replay
+      - name: battle
+      - name: battle_side
+      - name: battle_pokemon
+      - name: battle_event

@@ -152,3 +152,58 @@ models:
     columns:
       - name: opponent_species_id
         data_tests: [not_null]
+
+  - name: stg_battle
+    description: Each parsed public replay, with its format and the UTC month it started in.
+    columns:
+      - name: replay_id
+        data_tests: [unique, not_null]
+      - name: report_month
+        data_tests: [not_null]
+
+  - name: stg_battle_side
+    description: >
+      Each player in a parsed battle, with their Elo band and their team's inferred type. Elo is Showdown's ladder
+      rating, never comparable to Smogon's Glicko-weighted baselines.
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "replay_id || '-' || side"
+    columns:
+      - name: elo_band
+        description: >
+          The lower bound of the player's Elo before the battle: 1000 (the ladder's floor, up to 1199), 1200, 1400,
+          or 1600 and up. Null in unrated battles.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [1000, 1200, 1400, 1600]
+      - name: team_type
+        description: >
+          The one type every previewed Pokémon shares, inferred rather than read from the log; null when they share
+          none or more than one.
+
+  - name: stg_battle_pokemon
+    description: Each previewed Pokémon matched to reference.species.
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "replay_id || '-' || side || '-' || slot"
+    columns:
+      - name: species_id
+        description: Null when the preview matches no species; the not_null test turns that into a failure.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: source('reference', 'species')
+                field: species_id
+      - name: form_hidden
+        description: The preview hides which form it is (e.g. "Urshifu-*"); species_id is then the base species.
+
+  - name: stg_battle_event
+    description: Each game event in a parsed battle; replay_battle_event works out each Pokémon's form.
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "replay_id || '-' || seq"

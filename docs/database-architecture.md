@@ -307,7 +307,7 @@ The battle tables hold only what the log states, plus the inferences the parser 
 
 The `staging` and `api` schemas are built with [dbt](https://www.getdbt.com/) from `raw` and `reference` after each monthly load. A scheduled job checks daily for the previous month, loads it once Smogon publishes it, and then runs the build:
 
-- **`staging`** holds views that clean each raw table once: they keep only the latest version of each file, match Smogon's names to `reference` IDs, and flag placeholders such as empty move slots. Tests check that every name matches, nothing is duplicated, and every loaded month and baseline has all 77 files.
+- **`staging`** holds views that clean each raw table once: they keep only the latest version of each file, match Smogon's and Showdown's names to `reference` IDs, and flag placeholders such as empty move slots. Tests check that every name matches, nothing is duplicated, and every loaded month and baseline has all 77 files.
 - **`api`** holds the published statistics as tables and the reference data as views. Each model has a contract that fixes its column names, types, and constraints, so a change in Smogon's data fails the build rather than changing what clients see.
 
 `staging` is built and tested first, and `api` is rebuilt only if every staging test passes. Each `api` table's own tests run after that table is rebuilt, so when one fails, the table already holds the new data until the problem is fixed and the build is rerun.
@@ -367,6 +367,31 @@ A few values differ from how Smogon prints them:
 - **Real usage:** Smogon scales "Real %" so all Pokémon sum to 600%, which lets it exceed 100%. `real_share` divides by 600 instead, giving each Pokémon's share of all Pokémon brought into battle.
 - **Mirror matches:** Smogon prints a type against itself as 0%. `win_rate` is null for these, since no real win rate exists.
 - **Placeholders:** empty move slots and unfilled team slots are left out; sets with no held item are kept, with a null item.
+
+### Replay Statistics
+
+The replay tables are built from the parsed battles in `raw`, and kept apart from Smogon's statistics: they describe a sample of the battles players chose to upload, not the whole ladder. Staging matches every previewed Pokémon to `reference.species` (a form team preview hides, such as `Urshifu-*`, matches its base species and is flagged) and infers each team's type as the one type all six previewed Pokémon share; teams sharing none (some unrated challenges drop the Same Type Clause) or more than one have no type. Battles belong to the UTC month they started in.
+
+Four tables publish each battle in full, so it can be followed turn by turn. Events carry the species of the form each Pokémon is in, such as Urshifu-Rapid-Strike or Mimikyu-Busted, from the last form it showed. The two large tables are incremental: a build adds every battle whose current parse isn't in them yet and replaces every row of a re-parsed battle, so a change to their logic needs `dbt build --full-refresh`. Each has a primary key, which also makes reading one battle fast.
+
+| Table | Contents |
+| --- | --- |
+| `replay_battle` | One row per battle: its replay page, whether it was rated, when it started and ended, turns, the winner, how it ended, and its rules |
+| `replay_battle_side` | Each player, with their Elo before and after, Elo band, result, and inferred team type |
+| `replay_battle_pokemon` | Each previewed Pokémon, matched to its species (incremental) |
+| `replay_battle_event` | Every game event in order, as in `raw.battle_event` without the original log line (incremental) |
+
+Five tables summarize rated battles by month and Elo band. A player's Elo band is the lower bound of their Showdown Elo before the battle: 1000 (the ladder's floor, up to 1199), 1200, 1400, or 1600 and up. Elo is never comparable to Smogon's Glicko-weighted 1630 and 1760 baselines.
+
+| Table | Contents |
+| --- | --- |
+| `replay_sample` | The sample sizes: battles and rated battles per month, and rated teams per band, with how many have an inferred type |
+| `replay_type_matchup` | Battles, wins, ties, and win rate for each team type against each opposing type; ties count against the win rate, and mirror matches have none |
+| `replay_lead` | How often each Pokémon leads a team of its type, and how often those teams win; shares sum to 1 per type and band |
+| `replay_move_damage` | Direct hits from each Pokémon's moves on the opposing Pokémon: hits, mean damage, and knockouts |
+| `replay_hazard_damage` | Damage from Stealth Rock and Spikes by the type of the team taking it: hits, mean damage, and knockouts |
+
+Damage is a percent of max HP, as the log shows it, so a hit is capped at the HP its target had left and a strong move's mean damage understates it.
 
 ## Data Conventions
 

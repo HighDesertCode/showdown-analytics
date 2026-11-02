@@ -1,0 +1,217 @@
+# Monthly statistics from rated public Showdown replays: a sample of the battles players chose to upload, kept apart
+# from Smogon's ladder-wide statistics. Each is grouped by Elo band, the lower bound of a player's Showdown Elo
+# before the battle (1000, 1200, 1400, or 1600 and up), which is never comparable to Smogon's Glicko-weighted 1630
+# and 1760 baselines. Team types are inferred from team preview. replay_sample gives each month's sample sizes.
+models:
+
+  - name: replay_sample
+    description: Rated teams per month and Elo band in the public replay sample, and how many have an inferred type.
+    config:
+      contract:
+        enforced: true
+    constraints:
+      - type: primary_key
+        columns: [format, report_month, elo_band]
+    columns:
+      - name: format
+        data_type: text
+      - name: report_month
+        description: First day of the UTC month the battles started in.
+        data_type: date
+      - name: elo_band
+        description: The lower bound of the players' Elo before the battle.
+        data_type: integer
+      - name: battle_count
+        description: Every parsed battle that month, rated or not; repeated on each band's row.
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: rated_battle_count
+        description: Rated battles that month; repeated on each band's row.
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: team_count
+        description: Teams in rated battles whose player was in this band.
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: typed_team_count
+        description: Those teams with an inferred type, the ones the type-based tables count.
+        data_type: bigint
+        constraints: [{type: not_null}]
+
+  - name: replay_type_matchup
+    description: Rated battles and wins for each team type against each opposing type, by the team's Elo band.
+    config:
+      contract:
+        enforced: true
+    constraints:
+      - type: primary_key
+        columns: [format, report_month, elo_band, type_id, opponent_type_id]
+    columns:
+      - name: format
+        data_type: text
+      - name: report_month
+        data_type: date
+      - name: elo_band
+        description: The team's Elo band; the opponent can be in another.
+        data_type: integer
+      - name: type_id
+        data_type: bigint
+      - name: type
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: type_name
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: opponent_type_id
+        data_type: bigint
+      - name: opponent_type
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: opponent_type_name
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: is_mirror
+        data_type: boolean
+        constraints: [{type: not_null}]
+      - name: battle_count
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: win_count
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: tie_count
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: win_rate
+        description: win_count / battle_count, so ties count against it; null for mirror matches.
+        data_type: numeric
+        constraints: [{type: check, expression: "win_rate BETWEEN 0 AND 1"}]
+
+  - name: replay_lead
+    description: How often each Pokémon leads a team of its type, and how often those teams win, by Elo band.
+    config:
+      contract:
+        enforced: true
+    constraints:
+      - type: primary_key
+        columns: [format, report_month, elo_band, team_type, species_id]
+    columns:
+      - name: format
+        data_type: text
+      - name: report_month
+        data_type: date
+      - name: elo_band
+        data_type: integer
+      - name: team_type
+        description: The team's inferred type, as a Showdown ID.
+        data_type: text
+      - name: species_id
+        description: The lead's species, in the form it entered as (e.g. Urshifu-Rapid-Strike).
+        data_type: bigint
+      - name: species
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: species_name
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: lead_count
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: team_count
+        description: >
+          Teams of this type and band that sent out a lead, the denominator of lead_share. A battle forfeited at team
+          preview has no lead.
+        data_type: numeric
+        constraints: [{type: not_null}]
+      - name: lead_share
+        description: lead_count / team_count; sums to 1 per type and band.
+        data_type: numeric
+        constraints: [{type: not_null}, {type: check, expression: "lead_share BETWEEN 0 AND 1"}]
+      - name: win_count
+        description: Battles the teams with this lead won.
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: win_rate
+        description: win_count / lead_count.
+        data_type: numeric
+        constraints: [{type: not_null}, {type: check, expression: "win_rate BETWEEN 0 AND 1"}]
+
+  - name: replay_move_damage
+    description: >
+      Direct hits from each Pokémon's moves on the opposing Pokémon, by the attacker's Elo band. Damage is capped at
+      the HP the target had left, so a strong move's mean understates it.
+    config:
+      contract:
+        enforced: true
+    constraints:
+      - type: primary_key
+        columns: [format, report_month, elo_band, species_id, move_id]
+    columns:
+      - name: format
+        data_type: text
+      - name: report_month
+        data_type: date
+      - name: elo_band
+        data_type: integer
+      - name: species_id
+        description: The attacker, in the form it was in.
+        data_type: bigint
+      - name: species
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: species_name
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: move_id
+        data_type: bigint
+      - name: move
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: move_name
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: hit_count
+        description: Hits that dealt damage; each hit of a multi-hit move counts.
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: mean_damage_percent
+        description: Mean damage per hit, as a percent (0 to 100) of the target's max HP.
+        data_type: numeric
+        constraints: [{type: not_null}, {type: check, expression: "mean_damage_percent BETWEEN 0 AND 100"}]
+      - name: knockout_count
+        description: Hits that left the target with no HP.
+        data_type: bigint
+        constraints: [{type: not_null}]
+
+  - name: replay_hazard_damage
+    description: Damage from Stealth Rock and Spikes, by the Elo band and inferred type of the team taking it.
+    config:
+      contract:
+        enforced: true
+    constraints:
+      - type: primary_key
+        columns: [format, report_month, elo_band, team_type, hazard]
+    columns:
+      - name: format
+        data_type: text
+      - name: report_month
+        data_type: date
+      - name: elo_band
+        data_type: integer
+      - name: team_type
+        data_type: text
+      - name: hazard
+        description: Stealth Rock or Spikes, as the log names it.
+        data_type: text
+      - name: hit_count
+        description: Times a Pokémon took damage from this hazard on switching in.
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: mean_damage_percent
+        description: Mean damage per hit, as a percent (0 to 100) of max HP.
+        data_type: numeric
+        constraints: [{type: not_null}, {type: check, expression: "mean_damage_percent BETWEEN 0 AND 100"}]
+      - name: knockout_count
+        description: Hits that left the Pokémon with no HP.
+        data_type: bigint
+        constraints: [{type: not_null}]

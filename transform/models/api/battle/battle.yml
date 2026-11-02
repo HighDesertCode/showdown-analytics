@@ -1,0 +1,206 @@
+# Battle-by-battle detail from public Showdown replays: a sample of the battles players chose to upload, kept
+# apart from Smogon's ladder-wide statistics. Each primary key also indexes replay_id, so one battle reads quickly.
+models:
+
+  - name: replay_battle
+    description: One row per parsed public replay.
+    config:
+      contract:
+        enforced: true
+    constraints:
+      - type: primary_key
+        columns: [replay_id]
+    columns:
+      - name: replay_id
+        description: Showdown's replay ID, e.g. gen9monotype-2691037303.
+        data_type: text
+      - name: format
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: report_month
+        description: First day of the UTC month the battle started in.
+        data_type: date
+        constraints: [{type: not_null}]
+      - name: replay_url
+        description: The replay's public page on Showdown.
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: rated
+        description: Whether the battle counted for the ladder; challenges and tournaments are unrated.
+        data_type: boolean
+        constraints: [{type: not_null}]
+      - name: started_at
+        data_type: timestamp with time zone
+        constraints: [{type: not_null}]
+      - name: ended_at
+        data_type: timestamp with time zone
+        constraints: [{type: not_null}]
+      - name: turns
+        data_type: smallint
+        constraints: [{type: not_null}]
+      - name: winner
+        description: The winning side, p1 or p2; null for a tie.
+        data_type: text
+      - name: ended_by
+        description: knockout, forfeit, inactivity, or tie.
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: rules
+        description: The battle's rules, e.g. Same Type Clause; unrated challenges can change them.
+        data_type: text[]
+        constraints: [{type: not_null}]
+      - name: uploaded_at
+        data_type: timestamp with time zone
+        constraints: [{type: not_null}]
+      - name: parsed_at
+        data_type: timestamp with time zone
+        constraints: [{type: not_null}]
+
+  - name: replay_battle_side
+    description: >
+      Each player in a parsed public replay. Elo is Showdown's ladder rating, never comparable to Smogon's
+      Glicko-weighted 1630 and 1760 baselines.
+    config:
+      contract:
+        enforced: true
+    constraints:
+      - type: primary_key
+        columns: [replay_id, side]
+    columns:
+      - name: replay_id
+        data_type: text
+      - name: side
+        description: p1 or p2.
+        data_type: text
+      - name: player
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: elo_before
+        description: The player's Elo before the battle; null if unrated.
+        data_type: smallint
+      - name: elo_after
+        description: The player's Elo after the battle; null if unrated or the log doesn't show it.
+        data_type: smallint
+      - name: elo_band
+        description: >
+          The lower bound of elo_before: 1000 (the ladder's floor, up to 1199), 1200, 1400, or 1600 and up.
+          Null if unrated.
+        data_type: integer
+      - name: result
+        description: win, loss, or tie.
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: team_type_id
+        data_type: bigint
+      - name: team_type
+        description: >
+          Inferred, not read from the log: the one type every previewed Pokémon shares, as a Showdown ID. Null when
+          they share none (some unrated challenges drop the Same Type Clause) or more than one.
+        data_type: text
+
+  - name: replay_battle_pokemon
+    description: Each Pokémon previewed in a parsed public replay, in preview order.
+    config:
+      contract:
+        enforced: true
+    constraints:
+      - type: primary_key
+        columns: [replay_id, side, slot]
+    columns:
+      - name: replay_id
+        data_type: text
+      - name: side
+        data_type: text
+      - name: slot
+        description: Its position in team preview, 1 to 6.
+        data_type: smallint
+      - name: previewed_species
+        description: The species as previewed; "Urshifu-*" hides which form it is.
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: species_id
+        description: The matched species; the base species for a hidden or cosmetic form.
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: form_hidden
+        data_type: boolean
+        constraints: [{type: not_null}]
+      - name: nickname
+        description: Null if it never switched in.
+        data_type: text
+      - name: parsed_at
+        description: When the battle was last parsed; incremental builds add every battle whose current parse isn't here.
+        data_type: timestamp with time zone
+        constraints: [{type: not_null}]
+
+  - name: replay_battle_event
+    description: >
+      Each game event in a parsed public replay, in log order, so a battle can be followed turn by turn. HP values
+      are percentages of max HP as the log shows them; damage is capped at the HP the target had left.
+    config:
+      contract:
+        enforced: true
+    constraints:
+      - type: primary_key
+        columns: [replay_id, seq]
+      # Checked as rows are inserted, so the full table never needs scanning.
+      - type: check
+        expression: "(pokemon IS NULL OR species_id IS NOT NULL) AND (target_pokemon IS NULL OR target_species_id IS NOT NULL)"
+    columns:
+      - name: replay_id
+        data_type: text
+      - name: seq
+        description: The event's position in the battle, from 1.
+        data_type: integer
+      - name: turn
+        description: 0 for events before the first turn, such as the leads switching in.
+        data_type: smallint
+        constraints: [{type: not_null}]
+      - name: side
+        description: The side of the Pokémon acting or affected; null for field events such as weather.
+        data_type: text
+      - name: pokemon
+        description: The species as shown at team preview, e.g. Urshifu-*, so events join to replay_battle_pokemon.
+        data_type: text
+      - name: species_id
+        description: >
+          The form the Pokémon is in at this event, e.g. Urshifu-Rapid-Strike or Mimikyu-Busted: the last form it
+          showed by switching in, being dragged in, an Illusion ending, or changing form. A Zoroark still disguised
+          keeps its own previewed species.
+        data_type: bigint
+      - name: event
+        description: What happened, e.g. move, damage, switch, or side start.
+        data_type: text
+        constraints: [{type: not_null}]
+      - name: detail
+        description: The move, ability, condition, or species involved, depending on the event.
+        data_type: text
+      - name: target_side
+        data_type: text
+      - name: target_pokemon
+        data_type: text
+      - name: target_species_id
+        description: The form the target is in at this event, worked out like species_id.
+        data_type: bigint
+      - name: damage_percent
+        description: HP lost, as a percent of max HP.
+        data_type: smallint
+      - name: hp_after_percent
+        description: HP left afterwards, as a percent of max HP.
+        data_type: smallint
+      - name: healed_percent
+        data_type: smallint
+      - name: caused_by_seq
+        description: The seq of the event that caused this one, such as the move behind a hit.
+        data_type: integer
+      - name: source
+        description: The cause the log names, e.g. Stealth Rock or item Life Orb.
+        data_type: text
+      - name: source_inferred
+        description: The parser deduced the cause rather than reading it from the log.
+        data_type: boolean
+        constraints: [{type: not_null}]
+      - name: parsed_at
+        description: When the battle was last parsed; incremental builds add every battle whose current parse isn't here.
+        data_type: timestamp with time zone
+        constraints: [{type: not_null}]
