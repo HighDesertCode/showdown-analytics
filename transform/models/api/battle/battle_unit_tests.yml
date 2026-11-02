@@ -74,7 +74,7 @@ unit_tests:
       Events take the form a Pokémon last showed. Urshifu-* enters as Urshifu-Rapid-Strike, and Maushold, the target,
       as Maushold-Four. Mimikyu becomes Mimikyu-Busted mid-battle. A Zoroark-Hisui disguised as Urshifu-Rapid-Strike
       switches in showing that species, which isn't its own, so it keeps its previewed species before and after the
-      Illusion ends.
+      Illusion ends. Maushold is previewed twice (possible without Species Clause), and its events still appear once.
     model: replay_battle_event
     overrides:
       macros:
@@ -101,6 +101,7 @@ unit_tests:
           - {replay_id: a, side: p1, previewed_species: "Urshifu-*", species_id: 1}
           - {replay_id: a, side: p1, previewed_species: Mimikyu, species_id: 3}
           - {replay_id: a, side: p1, previewed_species: Zoroark-Hisui, species_id: 5}
+          - {replay_id: a, side: p2, previewed_species: Maushold, species_id: 7}
           - {replay_id: a, side: p2, previewed_species: Maushold, species_id: 7}
       - input: source('reference', 'species')
         rows:

@@ -134,6 +134,10 @@ def parse(log: str, replay_id: str) -> Battle:
     for side in SIDES:
         if side in team_size and len(preview[side]) != team_size[side]:
             raise ReplayFormatError(f"{replay_id} previews {len(preview[side])} Pokémon for {side}")
+        # Events name a Pokémon by its previewed species, so two of one species (allowed without Species Clause)
+        # can't be told apart.
+        if duplicates := sorted({species for species in preview[side] if preview[side].count(species) > 1}):
+            raise ReplayFormatError(f"{replay_id} previews {', '.join(duplicates)} more than once for {side}")
 
     team = tuple(
         PreviewPokemon(side, slot, species, _nickname(lines, side, species, preview[side]))
