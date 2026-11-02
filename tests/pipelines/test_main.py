@@ -553,3 +553,102 @@ def test_parse_replays_command(monkeypatch, arguments, reparse):
     cli.main()
 
     assert calls == [reparse]
+
+
+def fake_update_replays(monkeypatch, loaded=("gen9monotype-1",), failed=(), rejected=(), dbt_statuses=(0, 0)):
+    """Fakes update_replays's collection, parse, and dbt calls; returns the calls made, in order."""
+    calls = []
+    statuses = list(dbt_statuses)
+
+    def collect(start, end):
+        calls.append(("collect", start, end))
+        return list(loaded), list(failed)
+
+    def parse(replay_ids, reparse=False):
+        calls.append(("parse", replay_ids))
+        return list(rejected)
+
+    def run(command, check):
+        calls.append(("dbt", command[command.index("--select") + 1 : command.index("--project-dir")]))
+        return subprocess.CompletedProcess(command, statuses.pop(0))
+
+    monkeypatch.setattr(cli.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(cli, "collect", collect)
+    monkeypatch.setattr(cli, "parse", parse)
+    monkeypatch.setattr(cli.subprocess, "run", run)
+    return calls
+
+
+STAGING = ["path:models/staging/stg_battle*"]
+API = ["path:models/api/battle", "path:models/api/replay"]
+
+
+def test_update_replays_collects_parses_and_builds_only_the_replay_models(monkeypatch):
+    calls = fake_update_replays(monkeypatch, loaded=["gen9monotype-1", "gen9monotype-2"])
+
+    cli.update_replays()
+
+    assert calls == [
+        ("collect", None, None),
+        ("parse", ["gen9monotype-1", "gen9monotype-2"]),
+        ("dbt", STAGING),
+        ("dbt", API),
+    ]
+
+
+def test_update_replays_lists_rejected_replays_without_failing(monkeypatch, capsys):
+    rejected = [("gen9monotype-2", ReplayFormatError("gen9monotype-2 has an unknown line type 'error'"))]
+    calls = fake_update_replays(monkeypatch, rejected=rejected)
+
+    cli.update_replays()
+
+    assert calls[-1] == ("dbt", API)
+    assert capsys.readouterr().out == (
+        "\n1 replays couldn't be parsed and were left out:\n"
+        "  gen9monotype-2: gen9monotype-2 has an unknown line type 'error'\n"
+    )
+
+
+def test_update_replays_builds_then_fails_after_failed_downloads(monkeypatch, capsys):
+    failed = [("gen9monotype-3", ReplayFormatError("gen9monotype-3 is not public"))]
+    calls = fake_update_replays(monkeypatch, failed=failed)
+
+    with pytest.raises(SystemExit) as exit_info:
+        cli.update_replays()
+
+    assert exit_info.value.code == 1
+    assert calls[-1] == ("dbt", API)
+    assert capsys.readouterr().err == (
+        "\n1 replays failed to download; collect their window again to retry them:\n"
+        "  gen9monotype-3: gen9monotype-3 is not public\n"
+    )
+
+
+def test_update_replays_skips_api_when_staging_fails(monkeypatch):
+    calls = fake_update_replays(monkeypatch, dbt_statuses=(1,))
+
+    with pytest.raises(SystemExit) as exit_info:
+        cli.update_replays()
+
+    assert exit_info.value.code == 1
+    assert calls[-1] == ("dbt", STAGING)
+
+
+def test_update_replays_requires_dbt_before_collecting(monkeypatch):
+    calls = fake_update_replays(monkeypatch)
+    monkeypatch.setattr(cli.shutil, "which", lambda name: None)
+
+    with pytest.raises(RuntimeError, match="dbt is not installed"):
+        cli.update_replays()
+
+    assert calls == []
+
+
+def test_update_replays_command(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "update_replays", lambda: calls.append("update"))
+    monkeypatch.setattr("sys.argv", ["pipelines", "update-replays"])
+
+    cli.main()
+
+    assert calls == ["update"]

@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import sys
 from datetime import UTC, date, datetime, time, timedelta
+from typing import TextIO
 
 from psycopg import Connection
 
@@ -16,6 +17,9 @@ from pipelines.reference.load import load_all
 
 # Relative to the working directory: the repository root locally, and /app in the image.
 TRANSFORM_DIR = "transform"
+# The replay models and the staging views they read, built daily without touching the monthly Smogon models.
+REPLAY_STAGING = ("path:models/staging/stg_battle*",)
+REPLAY_API = ("path:models/api/battle", "path:models/api/replay")
 
 
 def check_connection() -> None:
@@ -137,8 +141,15 @@ def run_dbt(*arguments: str) -> None:
 
 
 def collect_replays(start: date | None, end: date | None) -> None:
+    loaded, failed = collect(start, end)
+    if failed:
+        report(failed, "replays failed; collect their window again to retry them")
+        raise SystemExit(1)
+
+
+def collect(start: date | None, end: date | None) -> tuple[list[str], list[tuple[str, Exception]]]:
     """Stores the public replays uploaded from `start` through `end` (UTC days), or, with no window, those uploaded
-    since the newest one already stored.
+    since the newest one already stored, and returns the IDs it stored and the replays that failed.
 
     Every search page is read first, then replays are downloaded oldest first and committed one at a time, so a
     killed run never leaves a gap below the newest stored replay, where the next run resumes.
@@ -157,6 +168,7 @@ def collect_replays(start: date | None, end: date | None) -> None:
             f"Collecting {format_id} replays uploaded from {since:%Y-%m-%d %H:%M:%S} to "
             f"{'now' if until is None else f'{until:%Y-%m-%d %H:%M:%S}'} UTC"
         )
+        loaded: list[str] = []
         failed: list[tuple[str, Exception]] = []
         run_id = replay_collection_run.start(conn, format_id)
         conn.commit()
@@ -184,6 +196,7 @@ def collect_replays(start: date | None, end: date | None) -> None:
                 replay.insert(conn, downloaded, datetime.now(UTC))
                 replay_collection_run.record_replay(conn, run_id, "loaded")
                 conn.commit()
+                loaded.append(result.replay_id)
                 print(f"{result.replay_id}  {result.uploaded_at:%Y-%m-%d %H:%M:%S}  loaded")
         except Exception as error:
             conn.rollback()
@@ -192,23 +205,31 @@ def collect_replays(start: date | None, end: date | None) -> None:
             raise
         replay_collection_run.finish(conn, run_id, "partial" if failed else "succeeded")
         conn.commit()
-    print(f"{len(new) - len(failed)} loaded, {len(failed)} failed")
-    if failed:
-        print(f"\n{len(failed)} replays failed; collect their window again to retry them:", file=sys.stderr)
-        for replay_id, error in failed:
-            print(f"  {replay_id}: {error}", file=sys.stderr)
-        raise SystemExit(1)
+    print(f"{len(loaded)} loaded, {len(failed)} failed")
+    return loaded, failed
 
 
 def parse_replays(reparse: bool = False) -> None:
     """Parses every stored replay that has no parsed battle yet, or with `reparse`, every stored replay again.
 
-    Each battle is parsed, and with `reparse` its old parse deleted, then inserted and committed on its own, so a
-    battle never mixes two parses. A replay the parser rejects keeps its old parse (or stays unparsed) and is listed
-    at the end, and the command exits with status 1; once the parser handles it, a rerun parses it.
+    A replay the parser rejects is listed at the end, and the command exits with status 1; once the parser handles
+    it, a rerun parses it.
     """
     with db.connect() as conn:
         replay_ids = battle.all_ids(conn) if reparse else battle.unparsed_ids(conn)
+    failed = parse(replay_ids, reparse)
+    if failed:
+        report(failed, "replays couldn't be parsed")
+        raise SystemExit(1)
+
+
+def parse(replay_ids: list[str], reparse: bool = False) -> list[tuple[str, Exception]]:
+    """Parses the given stored replays, with `reparse` replacing their earlier parses, and returns those rejected.
+
+    Each battle is parsed, and with `reparse` its old parse deleted, then inserted and committed on its own, so a
+    battle never mixes two parses. A replay the parser rejects keeps its old parse (or stays unparsed).
+    """
+    with db.connect() as conn:
         print(f"{len(replay_ids)} replays to {'re-parse' if reparse else 'parse'}")
         failed: list[tuple[str, Exception]] = []
         for replay_id in replay_ids:
@@ -222,11 +243,37 @@ def parse_replays(reparse: bool = False) -> None:
             battle.insert(conn, parsed, datetime.now(UTC))
             conn.commit()
     print(f"{len(replay_ids) - len(failed)} parsed, {len(failed)} failed")
+    return failed
+
+
+def update_replays() -> None:
+    """Collects the replays uploaded since the newest stored one, parses them, then builds the replay models.
+
+    Run daily by the scheduled job. A replay the parser rejects is listed but doesn't fail the job, since it would
+    be rejected again every day; a failed search, download, or dbt build does. dbt builds only the replay models,
+    staging first, so a failed staging test leaves every api table untouched.
+    """
+    # Checked first, so a missing dbt fails the job before anything is collected.
+    if shutil.which("dbt") is None:
+        raise RuntimeError("dbt is not installed; run with `uv run --group dbt`")
+    loaded, failed = collect(None, None)
+    # Only this run's replays: ones rejected earlier stay unparsed and would fail again.
+    if rejected := parse(loaded):
+        report(rejected, "replays couldn't be parsed and were left out", file=sys.stdout)
+    for selectors in (REPLAY_STAGING, REPLAY_API):
+        run_dbt("build", "--select", *selectors)
     if failed:
-        print(f"\n{len(failed)} replays couldn't be parsed:", file=sys.stderr)
-        for replay_id, error in failed:
-            print(f"  {replay_id}: {error}", file=sys.stderr)
+        report(failed, "replays failed to download; collect their window again to retry them")
         raise SystemExit(1)
+
+
+def report(failures: list[tuple[str, Exception]], message: str, file: TextIO | None = None) -> None:
+    """Lists replays that failed, to stderr unless `file` is given."""
+    # Looked up on each call rather than as the default, which would keep the stderr from import time.
+    file = file or sys.stderr
+    print(f"\n{len(failures)} {message}:", file=file)
+    for replay_id, error in failures:
+        print(f"  {replay_id}: {error}", file=file)
 
 
 def main() -> None:
@@ -251,6 +298,9 @@ def main() -> None:
     )
     collect_parser.add_argument("--start", type=date.fromisoformat, help="first upload day (UTC), e.g. 2026-03-01")
     collect_parser.add_argument("--end", type=date.fromisoformat, help="last upload day (UTC), included")
+    commands.add_parser(
+        "update-replays", help="collect replays uploaded since the newest stored one, parse them, then run dbt"
+    )
     parse_parser = commands.add_parser("parse-replays", help="parse stored replays that haven't been parsed yet")
     parse_parser.add_argument(
         "--reparse", action="store_true", help="parse every stored replay again, replacing its earlier parse"
@@ -275,6 +325,8 @@ def main() -> None:
         collect_replays(args.start, args.end)
     elif args.command == "parse-replays":
         parse_replays(args.reparse)
+    elif args.command == "update-replays":
+        update_replays()
 
 
 if __name__ == "__main__":
