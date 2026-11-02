@@ -1,4 +1,4 @@
-# App Platform spec for the scheduled ingestion job. <Placeholders> are filled in only in the control panel or a
+# App Platform spec for the scheduled ingestion jobs. <Placeholders> are filled in only in the control panel or a
 # local copy that stays out of Git; secrets are set as encrypted SECRET variables, never written here.
 name: showdown-analytics-pipelines
 region: sfo
@@ -46,6 +46,47 @@ jobs:
         scope: RUN_TIME
         value: verify-full
       # Written to a file at startup by pipelines.db, since libpq reads the certificate only from a file.
+      - key: DATABASE_CA_CERT
+        scope: RUN_TIME
+        value: ${showdown-db.CA_CERT}
+      - key: DBT_USER
+        scope: RUN_TIME
+        value: showdown-transform
+      - key: DBT_PASSWORD
+        scope: RUN_TIME
+        type: SECRET # set in the control panel
+  - name: update-replays
+    kind: SCHEDULED
+    schedule:
+      cron: "0 6 * * *" # daily, done well before update-smogon's 8:00 run, so their dbt builds never overlap
+      time_zone: America/Los_Angeles
+    github:
+      repo: HighDesertCode/showdown-analytics
+      branch: main
+      deploy_on_push: true
+    dockerfile_path: pipelines/Dockerfile
+    run_command: pipelines update-replays
+    instance_size_slug: apps-s-1vcpu-1gb
+    # The same variables as update-smogon; DBT_PASSWORD is set for each job in the control panel.
+    envs:
+      - key: PGHOST
+        scope: RUN_TIME
+        value: private-${showdown-db.HOSTNAME}
+      - key: PGPORT
+        scope: RUN_TIME
+        value: ${showdown-db.PORT}
+      - key: PGDATABASE
+        scope: RUN_TIME
+        value: ${showdown-db.DATABASE}
+      - key: PGUSER
+        scope: RUN_TIME
+        value: ${showdown-db.USERNAME}
+      - key: PGPASSWORD
+        scope: RUN_TIME
+        value: ${showdown-db.PASSWORD}
+      - key: PGSSLMODE
+        scope: RUN_TIME
+        value: verify-full
       - key: DATABASE_CA_CERT
         scope: RUN_TIME
         value: ${showdown-db.CA_CERT}
