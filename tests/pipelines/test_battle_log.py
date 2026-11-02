@@ -187,6 +187,7 @@ def test_a_different_species_is_not_taken_for_a_form():
         (("|gen|9", "|gen|8"), "not 9"),
         (("|player|p2|MistyMarill|misty|1141\n", ""), "names players"),
         (("|poke|p2|Mimikyu, F|\n", ""), "previews 1 Pokémon for p2"),
+        (("|poke|p2|Mimikyu, F|", "|poke|p2|Tinkaton, F|"), "previews Tinkaton more than once for p2"),
         (("|turn|2", "|turn|two"), "turn line"),
     ],
 )

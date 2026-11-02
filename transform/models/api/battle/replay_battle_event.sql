@@ -21,7 +21,9 @@ event AS (
 ),
 
 team AS (
-    SELECT
+    -- One row per previewed species: events name Pokémon by species, so a species previewed twice (which the
+    -- parser rejects) must not multiply them.
+    SELECT DISTINCT
         pokemon.replay_id,
         pokemon.side,
         pokemon.previewed_species,
