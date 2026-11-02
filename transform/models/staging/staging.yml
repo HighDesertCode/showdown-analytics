@@ -202,8 +202,6 @@ models:
         description: The preview hides which form it is (e.g. "Urshifu-*"); species_id is then the base species.
 
   - name: stg_battle_event
-    description: Each game event in a parsed battle; replay_battle_event works out each Pokémon's form.
-    data_tests:
-      - unique:
-          arguments:
-            column_name: "replay_id || '-' || seq"
+    description: >
+      Each game event in a parsed battle; replay_battle_event works out each Pokémon's form. Not tested for
+      uniqueness, which raw.battle_event's primary key guarantees, so the daily build doesn't scan every event.

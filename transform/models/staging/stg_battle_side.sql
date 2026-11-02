@@ -1,20 +1,28 @@
 -- Each player in a parsed battle, with their Elo band and their team's type. Elo is Showdown's ladder rating,
 -- never comparable to Smogon's Glicko-weighted baselines. The team type isn't in the log: it is inferred as
 -- the one type every previewed Pokémon shares, and is null when they share none or more than one.
-WITH pokemon_type AS (
-    -- A hidden form could be any form of its species, so it counts as having every type they have.
-    SELECT DISTINCT
+WITH species_type AS (
+    -- Each species' types, worked out once here rather than per previewed Pokémon. A hidden form could be any form
+    -- of its species, so with form_hidden it counts as having every type they have.
+    SELECT DISTINCT species.species_id, hidden.form_hidden, form_type.type_id
+    FROM {{ source('reference', 'species') }} AS species
+    CROSS JOIN (VALUES (FALSE), (TRUE)) AS hidden (form_hidden)
+    INNER JOIN {{ source('reference', 'species') }} AS form
+        ON form.species_id = species.species_id
+        OR (hidden.form_hidden AND form.base_species = species.name)
+    CROSS JOIN LATERAL (VALUES (form.type_1_id), (form.type_2_id)) AS form_type (type_id)
+    WHERE form_type.type_id IS NOT NULL
+),
+
+pokemon_type AS (
+    SELECT
         pokemon.replay_id,
         pokemon.side,
         pokemon.slot,
-        form_type.type_id
+        species_type.type_id
     FROM {{ ref('stg_battle_pokemon') }} AS pokemon
-    INNER JOIN {{ source('reference', 'species') }} AS species ON species.species_id = pokemon.species_id
-    INNER JOIN {{ source('reference', 'species') }} AS form
-        ON form.species_id = species.species_id
-        OR (pokemon.form_hidden AND form.base_species = species.name)
-    CROSS JOIN LATERAL (VALUES (form.type_1_id), (form.type_2_id)) AS form_type (type_id)
-    WHERE form_type.type_id IS NOT NULL
+    INNER JOIN species_type
+        ON species_type.species_id = pokemon.species_id AND species_type.form_hidden = pokemon.form_hidden
 ),
 
 team_size AS (
