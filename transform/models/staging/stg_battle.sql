@@ -1,4 +1,5 @@
 -- One row per parsed replay, with its format, the UTC month it started in, and its public replay page.
+-- parsed_at changes when a replay is re-parsed, so incremental models use it to find new and re-parsed battles.
 SELECT
     battle.replay_id,
     replay.format_id AS format,
@@ -11,6 +12,7 @@ SELECT
     battle.winner,
     battle.ended_by,
     battle.rules,
-    replay.uploaded_at
+    replay.uploaded_at,
+    battle.parsed_at
 FROM {{ source('raw', 'battle') }} AS battle
 INNER JOIN {{ source('raw', 'replay') }} AS replay ON replay.replay_id = battle.replay_id

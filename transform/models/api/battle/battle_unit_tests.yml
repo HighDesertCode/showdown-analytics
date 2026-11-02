@@ -1,0 +1,57 @@
+# Unit tests: fixed input rows and the exact rows each model should return. They need no loaded data,
+# so CI runs them against empty tables. Only the columns a test depends on are listed.
+unit_tests:
+  - name: replay_battle_event_adds_battles_parsed_since_the_last_build
+    description: >
+      An incremental build selects only battles parsed after the latest one already in the table: a new battle (c)
+      and a re-parsed one (b), whose old rows dbt then replaces. Battle a is unchanged and is left alone.
+    model: replay_battle_event
+    overrides:
+      macros:
+        is_incremental: true
+    given:
+      - input: this
+        rows:
+          - {replay_id: a, seq: 1, parsed_at: "2026-11-01 09:00:00+00"}
+          - {replay_id: b, seq: 1, parsed_at: "2026-11-01 09:00:00+00"}
+      - input: ref('stg_battle_event')
+        rows:
+          - {replay_id: a, seq: 1}
+          - {replay_id: b, seq: 1}
+          - {replay_id: c, seq: 1}
+          - {replay_id: c, seq: 2}
+      - input: ref('stg_battle')
+        format: sql
+        rows: |
+          SELECT replay_id, parsed_at::TIMESTAMPTZ AS parsed_at
+          FROM (
+              VALUES
+                  ('a', '2026-11-01 09:00:00+00'),
+                  ('b', '2026-11-02 09:00:00+00'),
+                  ('c', '2026-11-02 09:00:00+00')
+          ) AS battle (replay_id, parsed_at)
+    expect:
+      rows:
+        - {replay_id: b, seq: 1, parsed_at: "2026-11-02 09:00:00+00"}
+        - {replay_id: c, seq: 1, parsed_at: "2026-11-02 09:00:00+00"}
+        - {replay_id: c, seq: 2, parsed_at: "2026-11-02 09:00:00+00"}
+
+  - name: replay_battle_event_loads_every_battle_into_an_empty_table
+    description: An empty table has no latest parse, so an incremental build into it takes every battle.
+    model: replay_battle_event
+    overrides:
+      macros:
+        is_incremental: true
+    given:
+      - input: this
+        rows: []
+      - input: ref('stg_battle_event')
+        rows:
+          - {replay_id: a, seq: 1}
+      - input: ref('stg_battle')
+        format: sql
+        rows: |
+          SELECT 'a' AS replay_id, '2026-11-01 09:00:00+00'::TIMESTAMPTZ AS parsed_at
+    expect:
+      rows:
+        - {replay_id: a, seq: 1, parsed_at: "2026-11-01 09:00:00+00"}

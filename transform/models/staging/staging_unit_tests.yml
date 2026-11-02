@@ -140,7 +140,8 @@ unit_tests:
             replay_id, 'gen9monotype' AS format, report_month::DATE AS report_month,
             'https://replay.pokemonshowdown.com/' || replay_id AS replay_url, NULL::BOOLEAN AS rated,
             started_at::TIMESTAMPTZ AS started_at, NULL::TIMESTAMPTZ AS ended_at, NULL::SMALLINT AS turns,
-            NULL::TEXT AS winner, NULL::TEXT AS ended_by, NULL::TEXT[] AS rules, NULL::TIMESTAMPTZ AS uploaded_at
+            NULL::TEXT AS winner, NULL::TEXT AS ended_by, NULL::TEXT[] AS rules, NULL::TIMESTAMPTZ AS uploaded_at,
+            NULL::TIMESTAMPTZ AS parsed_at
         FROM (
             VALUES
                 ('gen9monotype-2691037303', '2026-10-01', '2026-10-01 14:11:26+00'),
