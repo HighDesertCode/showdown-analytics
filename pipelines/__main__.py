@@ -4,6 +4,8 @@ import argparse
 import shutil
 import subprocess
 import sys
+from collections.abc import Generator
+from contextlib import contextmanager
 from datetime import UTC, date, datetime, time, timedelta
 from typing import TextIO
 
@@ -20,6 +22,8 @@ TRANSFORM_DIR = "transform"
 # The replay models and the staging views they read, built daily without touching the monthly Smogon models.
 REPLAY_STAGING = ("path:models/staging/stg_battle*",)
 REPLAY_API = ("path:models/api/battle", "path:models/api/replay")
+# Any fixed number: the Postgres advisory lock every scheduled command holds while dbt builds.
+DBT_LOCK = 4271983
 
 
 def check_connection() -> None:
@@ -125,8 +129,26 @@ def update_smogon(today: date) -> None:
     print(f"{month:%Y-%m}: loading {len(missing)} of {len(files)} files")
     load_smogon(month, families)
     # Staging first, so a failed staging test (such as a month missing files) leaves every api table untouched.
-    for selector in ("staging", "api"):
-        run_dbt("build", "--select", selector)
+    with dbt_lock():
+        for selector in ("staging", "api"):
+            run_dbt("build", "--select", selector)
+
+
+@contextmanager
+def dbt_lock() -> Generator[None]:
+    """Holds a database-wide lock while dbt builds, so two jobs never replace the same views and tables at once.
+
+    Postgres releases it when the connection closes, even if the process is killed.
+    """
+    with db.connect() as conn:
+        # Autocommit, so the connection waits idle rather than holding a transaction open through the build.
+        conn.autocommit = True
+        row = conn.execute("SELECT PG_TRY_ADVISORY_LOCK(%s)", (DBT_LOCK,)).fetchone()
+        if not (row and row[0]):
+            print("Waiting for another dbt build to finish")
+            sys.stdout.flush()
+            conn.execute("SELECT PG_ADVISORY_LOCK(%s)", (DBT_LOCK,))
+        yield
 
 
 def run_dbt(*arguments: str) -> None:
@@ -247,21 +269,29 @@ def parse(replay_ids: list[str], reparse: bool = False) -> list[tuple[str, Excep
 
 
 def update_replays() -> None:
-    """Collects the replays uploaded since the newest stored one, parses them, then builds the replay models.
+    """Collects the replays uploaded since the newest stored one, parses every unparsed replay, then builds the
+    replay models.
 
-    Run daily by the scheduled job. A replay the parser rejects is listed but doesn't fail the job, since it would
-    be rejected again every day; a failed search, download, or dbt build does. dbt builds only the replay models,
-    staging first, so a failed staging test leaves every api table untouched.
+    Run daily by the scheduled job. Parsing every unparsed replay, not just this run's, picks up any an interrupted
+    run stored without parsing. A replay the parser rejects doesn't fail the job, since it would be rejected again
+    every day; new rejections are listed and earlier ones counted. A failed search, download, or dbt build does fail
+    it. dbt builds only the replay models, staging first, so a failed staging test leaves every api table untouched.
     """
     # Checked first, so a missing dbt fails the job before anything is collected.
     if shutil.which("dbt") is None:
         raise RuntimeError("dbt is not installed; run with `uv run --group dbt`")
     loaded, failed = collect(None, None)
-    # Only this run's replays: ones rejected earlier stay unparsed and would fail again.
-    if rejected := parse(loaded):
-        report(rejected, "replays couldn't be parsed and were left out", file=sys.stdout)
-    for selectors in (REPLAY_STAGING, REPLAY_API):
-        run_dbt("build", "--select", *selectors)
+    with db.connect() as conn:
+        unparsed = battle.unparsed_ids(conn)
+    rejected = parse(unparsed)
+    stored_now = set(loaded)
+    if new_rejections := [failure for failure in rejected if failure[0] in stored_now]:
+        report(new_rejections, "new replays couldn't be parsed and were left out", file=sys.stdout)
+    if earlier := len(rejected) - len(new_rejections):
+        print(f"{earlier} replays stored before this run still couldn't be parsed")
+    with dbt_lock():
+        for selectors in (REPLAY_STAGING, REPLAY_API):
+            run_dbt("build", "--select", *selectors)
     if failed:
         report(failed, "replays failed to download; collect their window again to retry them")
         raise SystemExit(1)

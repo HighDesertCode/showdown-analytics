@@ -58,7 +58,7 @@ jobs:
   - name: update-replays
     kind: SCHEDULED
     schedule:
-      cron: "0 6 * * *" # daily, done well before update-smogon's 8:00 run, so their dbt builds never overlap
+      cron: "0 6 * * *" # daily, before update-smogon; a lock also keeps their dbt builds from overlapping
       time_zone: America/Los_Angeles
     github:
       repo: HighDesertCode/showdown-analytics
