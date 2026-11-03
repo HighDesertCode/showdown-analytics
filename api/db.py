@@ -6,7 +6,12 @@ PGSSLMODE=verify-full to a database that isn't local.
 """
 
 import os
+from collections.abc import Iterator
+from typing import Annotated, Any
 
+import psycopg
+from fastapi import Depends, Request
+from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
 REQUIRED_SETTINGS = ("PGHOST", "PGDATABASE", "PGUSER")
@@ -28,3 +33,14 @@ def create_pool() -> ConnectionPool:
         raise RuntimeError("Refusing to connect without PGSSLMODE=verify-full to a database that isn't local.")
     # An empty conninfo, so libpq reads the PG* variables.
     return ConnectionPool("", min_size=1, max_size=MAX_CONNECTIONS, open=False)
+
+
+def connection(request: Request) -> Iterator[psycopg.Connection[dict[str, Any]]]:
+    """A pooled connection for one request, returning rows as dicts, given back to the pool afterwards."""
+    with request.app.state.pool.connection() as conn:
+        conn.row_factory = dict_row
+        yield conn
+
+
+# The parameter type for endpoints that query the database.
+Connection = Annotated[psycopg.Connection[dict[str, Any]], Depends(connection)]
