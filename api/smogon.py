@@ -18,10 +18,12 @@ from api.params import (
     Month,
     Offset,
     TeamType,
+    Type,
     format_month,
     parse_month,
     team_type_id,
     to_id,
+    type_id,
 )
 from api.responses import Envelope, Page, SmogonScope, SourceFile
 
@@ -148,6 +150,72 @@ class PokemonProfile(BaseModel):
     counters: list[Counter] = Field(
         description="Checks and counters by Smogon's score, up to 10. Smogon publishes them for all teams only."
     )
+
+
+class PokemonLead(BaseModel):
+    rank: int = Field(description="The Pokémon's lead rank in this scope, 1 for the most common lead.")
+    species: str = Field(description="The species' Showdown ID.")
+    species_name: str
+    lead_share: float = Field(description="Share of leads, weighted by the baseline; sums to 1 per scope.")
+    raw_count: int = Field(description="Times this Pokémon led, unweighted.")
+    raw_lead_share: float = Field(description="Share of leads, unweighted; sums to 1 per scope.")
+
+
+class MetagameTag(BaseModel):
+    tag: str = Field(description="Smogon's tag, e.g. monoice, rain, or stall. Tags are Smogon's own classification.")
+    tag_team_type: str | None = Field(
+        description="The type's Showdown ID for type tags (e.g. ice for monoice); null for other tags."
+    )
+    share: float = Field(
+        description="Share of teams in this scope with this tag, weighted by the baseline. Tags overlap, so shares "
+        "don't sum to 1."
+    )
+
+
+class Metagame(BaseModel):
+    battle_count: int | None = Field(
+        description="Battles in the whole format that month; reports for one team type repeat the overall total, "
+        "so it isn't the number of that type's battles."
+    )
+    avg_team_weight: float | None = Field(
+        description="Total team weight at this baseline divided by all teams in the format, even for one team type."
+    )
+    stalliness_mean: float | None = Field(
+        description="Average stalliness: negative means more offensive teams, positive more defensive."
+    )
+    tags: list[MetagameTag] = Field(description="Every tag, most common first.")
+
+
+class TypeMatchup(BaseModel):
+    type: str = Field(description="The team type's Showdown ID, e.g. water.")
+    type_name: str
+    opponent_type: str = Field(description="The opposing team type's Showdown ID.")
+    opponent_type_name: str
+    is_mirror: bool = Field(description="True when a type faces itself.")
+    wins: float = Field(description="Weighted wins for this type in this pairing.")
+    win_rate: float | None = Field(
+        description="Wins over all wins in this pairing, from 0 to 1 (Smogon divides by at least 1, so a rare "
+        "pairing's two directions can sum below 1). Null for mirror matches."
+    )
+
+
+class TypeViability(BaseModel):
+    rank: int = Field(description="1 for the highest viability score in the chart.")
+    type: str = Field(description="The team type's Showdown ID.")
+    type_name: str
+    viability_score: float = Field(description="Smogon's published ViabilityScore; a score, not a win rate.")
+
+
+class SourceFileDetail(BaseModel):
+    source_file_id: int
+    family: str = Field(description="The report family: chaos, usage, leads, metagame, or matchup_chart.")
+    url: str = Field(description="Where the file is published on smogon.com.")
+    content_sha256: str = Field(
+        description="SHA-256 of the file as downloaded, in lowercase hex; identifies which version of a republished "
+        "file this is."
+    )
+    byte_size: int = Field(description="The file's size in bytes as downloaded.")
+    retrieved_at: datetime = Field(description="When the file was downloaded.")
 
 
 type SectionRows = (
@@ -320,6 +388,158 @@ def pokemon_section(
     )
 
 
+@router.get("/leads")
+def leads(
+    conn: Connection,
+    format: Format = DEFAULT_FORMAT,
+    month: Month = None,
+    baseline: Baseline = DEFAULT_BASELINE,
+    team_type: TeamType = None,
+    limit: Limit = 50,
+    offset: Offset = 0,
+) -> Envelope[list[PokemonLead]]:
+    """Pokémon ranked by how often they are sent out first, in one scope."""
+    scope = resolve_scope(conn, format, month, baseline, team_type)
+    total = count(conn, "pokemon_lead", scope)
+    rows = conn.execute(
+        f"""
+        SELECT rank, species, species_name, lead_share, raw_count, raw_lead_share
+        FROM api.pokemon_lead
+        WHERE {scope.filter}
+        ORDER BY rank, species
+        LIMIT %s OFFSET %s
+        """,
+        (*scope.args, limit, offset),
+    ).fetchall()
+    return Envelope(
+        scope=scope.echo,
+        sources=source_files(conn, [scope.report["leads_source_file_id"]]),
+        data=[PokemonLead(**row) for row in rows],
+        page=Page(limit=limit, offset=offset, total=total),
+    )
+
+
+@router.get("/metagame")
+def metagame(
+    conn: Connection,
+    format: Format = DEFAULT_FORMAT,
+    month: Month = None,
+    baseline: Baseline = DEFAULT_BASELINE,
+    team_type: TeamType = None,
+) -> Envelope[Metagame]:
+    """The scope's sample size, average stalliness, and share of teams with each type, play style, and weather tag."""
+    scope = resolve_scope(conn, format, month, baseline, team_type)
+    tags = conn.execute(
+        f"""
+        SELECT tag, tag_team_type, share
+        FROM api.metagame_tag
+        WHERE {scope.filter}
+        ORDER BY share DESC, tag
+        """,
+        scope.args,
+    ).fetchall()
+    report = scope.report
+    return Envelope(
+        scope=scope.echo,
+        sources=source_files(conn, [report["usage_source_file_id"], report["metagame_source_file_id"]]),
+        data=Metagame(
+            battle_count=report["battle_count"],
+            avg_team_weight=report["avg_team_weight"],
+            stalliness_mean=report["stalliness_mean"],
+            tags=[MetagameTag(**tag) for tag in tags],
+        ),
+    )
+
+
+@router.get("/type-matchups")
+def type_matchups(
+    conn: Connection,
+    format: Format = DEFAULT_FORMAT,
+    month: Month = None,
+    baseline: Baseline = DEFAULT_BASELINE,
+    type: Type = None,
+    opponent_type: Type = None,
+    limit: Limit = 50,
+    offset: Offset = 0,
+) -> Envelope[list[TypeMatchup]]:
+    """Weighted wins and win rate for each team type against each other type, from Smogon's matchup chart, which
+    covers all teams. Filter by type, opponent type, or both."""
+    chart = resolve_chart(conn, format, month, baseline)
+    conditions: list[LiteralString] = ["source_file_id = %s"]
+    args: list[Any] = [chart.source_file_id]
+    if (team := type_id(type)) is not None:
+        conditions.append("type = %s")
+        args.append(team)
+    if (opponent := type_id(opponent_type)) is not None:
+        conditions.append("opponent_type = %s")
+        args.append(opponent)
+    where = " AND ".join(conditions)
+    total = conn.execute(f"SELECT COUNT(*) AS total FROM api.type_matchup WHERE {where}", args).fetchone()
+    rows = conn.execute(
+        f"""
+        SELECT type, type_name, opponent_type, opponent_type_name, is_mirror, wins, win_rate
+        FROM api.type_matchup
+        WHERE {where}
+        ORDER BY type, opponent_type
+        LIMIT %s OFFSET %s
+        """,
+        (*args, limit, offset),
+    ).fetchall()
+    return Envelope(
+        scope=chart.echo,
+        sources=source_files(conn, [chart.source_file_id]),
+        data=[TypeMatchup(**row) for row in rows],
+        page=Page(limit=limit, offset=offset, total=total["total"] if total else 0),
+    )
+
+
+@router.get("/type-viability")
+def type_viability(
+    conn: Connection, format: Format = DEFAULT_FORMAT, month: Month = None, baseline: Baseline = DEFAULT_BASELINE
+) -> Envelope[list[TypeViability]]:
+    """Smogon's ViabilityScore for each team type, from its matchup chart, highest first. It is a published score,
+    not a win rate."""
+    chart = resolve_chart(conn, format, month, baseline)
+    rows = conn.execute(
+        """
+        SELECT rank, type, type_name, viability_score
+        FROM api.type_viability
+        WHERE source_file_id = %s
+        ORDER BY rank, type
+        """,
+        (chart.source_file_id,),
+    ).fetchall()
+    return Envelope(
+        scope=chart.echo,
+        sources=source_files(conn, [chart.source_file_id]),
+        data=[TypeViability(**row) for row in rows],
+    )
+
+
+@router.get("/source-files/{source_file_id}")
+def source_file(conn: Connection, source_file_id: int) -> Envelope[SourceFileDetail]:
+    """One Smogon file the statistics were loaded from: its URL, when it was downloaded, and its SHA-256, which
+    identifies the exact version used."""
+    row = conn.execute(
+        """
+        SELECT source_file_id, family, format, report_month, baseline, team_type, url, content_sha256, byte_size,
+            retrieved_at
+        FROM api.source_file
+        WHERE source_file_id = %s
+        """,
+        (source_file_id,),
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"No Smogon source file {source_file_id}")
+    scope = SmogonScope(
+        format=row.pop("format"),
+        month=format_month(row.pop("report_month")),
+        baseline=row.pop("baseline"),
+        team_type=row.pop("team_type"),
+    )
+    return Envelope(scope=scope, sources=[], data=SourceFileDetail(**row))
+
+
 # Matches one scope's rows. Overall reports have a null team type, matched with IS NULL rather than IS NOT DISTINCT
 # FROM, which can't use the models' indexes.
 ALL_TEAMS_FILTER: LiteralString = "format = %s AND report_month = %s AND baseline = %s AND team_type IS NULL"
@@ -366,7 +586,8 @@ def resolve_scope(conn: Connection, format: str, month: str | None, baseline: in
     type_id = team_type_id(team_type)
     report = conn.execute(
         f"""
-        SELECT usage_source_file_id, chaos_source_file_id, leads_source_file_id, metagame_source_file_id
+        SELECT battle_count, avg_team_weight, stalliness_mean, usage_source_file_id, chaos_source_file_id,
+            leads_source_file_id, metagame_source_file_id
         FROM api.report
         WHERE {scope_filter(type_id)}
         """,
@@ -422,6 +643,39 @@ def section_rows(conn: Connection, section: Section, scope: Scope, species: str,
         (*scope.args, species, limit, offset),
     ).fetchall()
     return [query.model(**row) for row in rows]
+
+
+@dataclass(frozen=True)
+class Chart:
+    """A resolved matchup chart: its month and baseline, and the file both type tables come from."""
+
+    format: str
+    month: date
+    baseline: int
+    source_file_id: int
+
+    @property
+    def echo(self) -> SmogonScope:
+        return SmogonScope(format=self.format, month=format_month(self.month), baseline=self.baseline)
+
+
+def resolve_chart(conn: Connection, format: str, month: str | None, baseline: int) -> Chart:
+    """Fills in the default month and finds its matchup chart; a 404 when Smogon published none."""
+    chart_month = resolve_month(conn, format, month, baseline)
+    row = conn.execute(
+        """
+        SELECT source_file_id
+        FROM api.source_file
+        WHERE family = 'matchup_chart' AND format = %s AND report_month = %s AND baseline = %s
+        """,
+        (format, chart_month, baseline),
+    ).fetchone()
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No Smogon matchup chart for {format} in {format_month(chart_month)} at baseline {baseline}",
+        )
+    return Chart(format, chart_month, baseline, row["source_file_id"])
 
 
 def source_files(conn: Connection, ids: list[int | None]) -> list[SourceFile]:

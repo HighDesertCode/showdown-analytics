@@ -8,8 +8,8 @@ AUGUST = date(2026, 8, 1)
 
 
 def add_report(insert, month=SEPTEMBER, baseline=1630, team_type=None, first_file_id=1):
-    """A report scope with its usage, chaos, and leads files, numbered from first_file_id."""
-    usage_id, chaos_id, leads_id = first_file_id, first_file_id + 1, first_file_id + 2
+    """A report scope with its usage, chaos, leads, and metagame files, numbered from first_file_id."""
+    usage_id, chaos_id, leads_id, metagame_id = range(first_file_id, first_file_id + 4)
     insert(
         "available_month",
         format="gen9monotype",
@@ -18,7 +18,8 @@ def add_report(insert, month=SEPTEMBER, baseline=1630, team_type=None, first_fil
         file_count=77,
         last_retrieved_at=RETRIEVED_AT,
     )
-    for source_file_id, family in ((usage_id, "usage"), (chaos_id, "chaos"), (leads_id, "leads")):
+    files = ((usage_id, "usage"), (chaos_id, "chaos"), (leads_id, "leads"), (metagame_id, "metagame"))
+    for source_file_id, family in files:
         insert(
             "source_file",
             source_file_id=source_file_id,
@@ -28,6 +29,8 @@ def add_report(insert, month=SEPTEMBER, baseline=1630, team_type=None, first_fil
             baseline=baseline,
             team_type=team_type,
             url=f"https://www.smogon.com/stats/{month:%Y-%m}/{family}/{source_file_id}",
+            content_sha256="ab" * 32,
+            byte_size=1024,
             retrieved_at=RETRIEVED_AT,
         )
     insert(
@@ -40,6 +43,9 @@ def add_report(insert, month=SEPTEMBER, baseline=1630, team_type=None, first_fil
         usage_source_file_id=usage_id,
         chaos_source_file_id=chaos_id,
         leads_source_file_id=leads_id,
+        metagame_source_file_id=metagame_id,
+        avg_team_weight=0.25,
+        stalliness_mean=-0.4,
     )
 
 
@@ -67,7 +73,7 @@ def add_usage(insert, rank, species, species_name, month=SEPTEMBER, baseline=163
 
 def test_months_lists_newest_first(client, insert):
     add_report(insert, month=AUGUST, first_file_id=1)
-    add_report(insert, month=SEPTEMBER, first_file_id=4)
+    add_report(insert, month=SEPTEMBER, first_file_id=11)
 
     body = client.get("/v1/smogon/months").json()
 
@@ -84,7 +90,7 @@ def test_months_lists_newest_first(client, insert):
 
 def test_usage_defaults_to_the_latest_month_at_1630_for_all_teams(client, insert):
     add_report(insert, month=AUGUST, first_file_id=1)
-    add_report(insert, month=SEPTEMBER, first_file_id=4)
+    add_report(insert, month=SEPTEMBER, first_file_id=11)
     add_usage(insert, 1, "greattusk", "Great Tusk", month=AUGUST)
     add_usage(insert, 1, "swampert", "Swampert")
     add_usage(insert, 2, "ninetalesalola", "Ninetales-Alola")
@@ -116,7 +122,7 @@ def test_usage_cites_the_scopes_usage_and_chaos_files(client, insert):
 @pytest.mark.parametrize("team_type", ["water", "Water", "WATER"])
 def test_usage_accepts_a_team_type_by_name_or_id(client, insert, team_type):
     add_report(insert)
-    add_report(insert, team_type="water", first_file_id=4)
+    add_report(insert, team_type="water", first_file_id=11)
     add_usage(insert, 1, "greattusk", "Great Tusk")
     add_usage(insert, 1, "swampert", "Swampert", team_type="water")
 
@@ -298,3 +304,173 @@ def test_openapi_schema_builds(client):
 
     assert response.status_code == 200
     assert "/v1/smogon/pokemon/{species}/{section}" in response.json()["paths"]
+
+
+def test_leads_ranks_pokemon_and_cites_the_leads_file(client, insert):
+    add_report(insert)
+    for rank, species in enumerate(["swampert", "greattusk"], start=1):
+        insert(
+            "pokemon_lead",
+            format="gen9monotype",
+            report_month=SEPTEMBER,
+            baseline=1630,
+            species=species,
+            species_name=species.title(),
+            rank=rank,
+            lead_share=0.1 / rank,
+            raw_count=100 // rank,
+            raw_lead_share=0.1 / rank,
+            source_file_id=3,
+        )
+
+    body = client.get("/v1/smogon/leads").json()
+
+    assert [(row["rank"], row["species"]) for row in body["data"]] == [(1, "swampert"), (2, "greattusk")]
+    assert [source["family"] for source in body["sources"]] == ["leads"]
+    assert body["page"]["total"] == 2
+
+
+def test_metagame_has_the_sample_size_and_tags_most_common_first(client, insert):
+    add_report(insert, team_type="water")
+    for tag, tag_team_type, share in (("rain", None, 0.3), ("monowater", "water", 1.0), ("stall", None, 0.1)):
+        insert(
+            "metagame_tag",
+            format="gen9monotype",
+            report_month=SEPTEMBER,
+            baseline=1630,
+            team_type="water",
+            tag=tag,
+            tag_team_type=tag_team_type,
+            share=share,
+            source_file_id=4,
+        )
+
+    body = client.get("/v1/smogon/metagame", params={"team_type": "water"}).json()
+
+    assert body["data"]["battle_count"] == 63572
+    assert body["data"]["stalliness_mean"] == -0.4
+    assert [tag["tag"] for tag in body["data"]["tags"]] == ["monowater", "rain", "stall"]
+    assert [source["family"] for source in body["sources"]] == ["metagame", "usage"]
+
+
+def add_chart(insert, month=SEPTEMBER, baseline=1630, source_file_id=50):
+    """A matchup chart: water and ground against each other and themselves, and their viability scores."""
+    insert(
+        "available_month",
+        format="gen9monotype",
+        report_month=month,
+        baseline=baseline,
+        file_count=77,
+        last_retrieved_at=RETRIEVED_AT,
+    )
+    insert(
+        "source_file",
+        source_file_id=source_file_id,
+        family="matchup_chart",
+        format="gen9monotype",
+        report_month=month,
+        baseline=baseline,
+        url=f"https://www.smogon.com/stats/{month:%Y-%m}/monotype/matchupcharts/{baseline}",
+        content_sha256="cd" * 32,
+        byte_size=2048,
+        retrieved_at=RETRIEVED_AT,
+    )
+    rates = {("water", "ground"): 0.72636, ("ground", "water"): 0.27364}
+    for type_ in ("water", "ground"):
+        for opponent in ("water", "ground"):
+            insert(
+                "type_matchup",
+                format="gen9monotype",
+                report_month=month,
+                baseline=baseline,
+                type=type_,
+                type_name=type_.title(),
+                opponent_type=opponent,
+                opponent_type_name=opponent.title(),
+                is_mirror=type_ == opponent,
+                wins=100.0,
+                win_rate=rates.get((type_, opponent)),
+                source_file_id=source_file_id,
+            )
+    for rank, type_, score in ((1, "water", 2.5), (2, "ground", 1.2)):
+        insert(
+            "type_viability",
+            format="gen9monotype",
+            report_month=month,
+            baseline=baseline,
+            type=type_,
+            type_name=type_.title(),
+            viability_score=score,
+            rank=rank,
+            source_file_id=source_file_id,
+        )
+
+
+def test_type_matchups_lists_every_pairing_from_the_chart(client, insert):
+    add_chart(insert)
+
+    body = client.get("/v1/smogon/type-matchups").json()
+
+    assert body["scope"] == {
+        "source": "smogon",
+        "format": "gen9monotype",
+        "month": "2026-09",
+        "baseline": 1630,
+        "team_type": None,
+    }
+    assert [(row["type"], row["opponent_type"], row["win_rate"]) for row in body["data"]] == [
+        ("ground", "ground", None),
+        ("ground", "water", 0.27364),
+        ("water", "ground", 0.72636),
+        ("water", "water", None),
+    ]
+    assert [source["source_file_id"] for source in body["sources"]] == [50]
+
+
+def test_type_matchups_filters_by_type_and_opponent(client, insert):
+    add_chart(insert)
+
+    body = client.get("/v1/smogon/type-matchups", params={"type": "Water", "opponent_type": "ground"}).json()
+
+    assert [(row["type"], row["opponent_type"]) for row in body["data"]] == [("water", "ground")]
+    assert body["page"]["total"] == 1
+
+
+def test_type_matchups_explains_a_missing_chart(client, insert):
+    add_report(insert)
+
+    response = client.get("/v1/smogon/type-matchups")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "No Smogon matchup chart for gen9monotype in 2026-09 at baseline 1630"}
+
+
+def test_type_viability_ranks_types(client, insert):
+    add_chart(insert)
+
+    body = client.get("/v1/smogon/type-viability").json()
+
+    assert [(row["rank"], row["type"], row["viability_score"]) for row in body["data"]] == [
+        (1, "water", 2.5),
+        (2, "ground", 1.2),
+    ]
+
+
+def test_source_file_shows_its_version_and_scope(client, insert):
+    add_report(insert, team_type="water")
+
+    body = client.get("/v1/smogon/source-files/2").json()
+
+    assert body["scope"] == {
+        "source": "smogon",
+        "format": "gen9monotype",
+        "month": "2026-09",
+        "baseline": 1630,
+        "team_type": "water",
+    }
+    assert body["data"]["family"] == "chaos"
+    assert body["data"]["content_sha256"] == "ab" * 32
+
+
+def test_source_file_explains_a_missing_file(client, insert):
+    assert client.get("/v1/smogon/source-files/999").json() == {"detail": "No Smogon source file 999"}

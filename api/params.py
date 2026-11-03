@@ -46,7 +46,17 @@ def team_type_id(team_type: str | None) -> str | None:
     """The team type's Showdown ID, or None for all teams (left out, or "overall")."""
     if team_type is None or to_id(team_type) == "overall":
         return None
-    type_id = to_id(team_type)
-    if not type_id:
-        raise HTTPException(status_code=422, detail=f"{team_type!r} isn't a type")
-    return type_id
+    return type_id(team_type)
+
+
+Type = Annotated[str | None, Query(description="A type, e.g. water or Water. Leave out for every type.")]
+
+
+def type_id(type_name: str | None) -> str | None:
+    """A type's Showdown ID, or None when left out."""
+    if type_name is None:
+        return None
+    showdown_id = to_id(type_name)
+    if not showdown_id:
+        raise HTTPException(status_code=422, detail=f"{type_name!r} isn't a type")
+    return showdown_id
