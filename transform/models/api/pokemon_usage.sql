@@ -1,3 +1,5 @@
+{{ config(indexes=[{'columns': ['format', 'report_month', 'baseline', 'team_type', 'species']}]) }}
+-- The index serves the API, which reads one Pokémon in one scope.
 -- One row per Pokémon in each report scope: usage from the usage report, plus the viability ceiling from chaos.
 -- Smogon's percentages become 0-to-1 proportions:
 --   usage_share: weighted share of teams with this Pokémon (usage % / 100)

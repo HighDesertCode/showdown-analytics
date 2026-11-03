@@ -1,3 +1,5 @@
+{{ config(indexes=[{'columns': ['format', 'report_month', 'baseline', 'team_type', 'species']}]) }}
+-- The index serves the API, which reads one Pokémon in one scope.
 -- Share of each Pokémon's teams that include each teammate, per report scope.
 -- Shares sum to just under 5 per Pokémon (five other slots), since chaos leaves out teammates with negligible weight.
 -- Unfilled team slots are left out; Smogon gives them no weight.

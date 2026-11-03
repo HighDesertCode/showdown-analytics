@@ -1,3 +1,5 @@
+{{ config(indexes=[{'columns': ['format', 'report_month', 'baseline', 'team_type', 'species']}]) }}
+-- The index serves the API, which reads one Pokémon in one scope.
 -- One row per Pokémon in each leads report: how often it is sent out first. Shares sum to 1 per report.
 -- Smogon's lead total is left out: per-type reports repeat the overall total, so it can't serve as their denominator.
 SELECT

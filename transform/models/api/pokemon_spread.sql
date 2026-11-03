@@ -1,3 +1,5 @@
+{{ config(indexes=[{'columns': ['format', 'report_month', 'baseline', 'team_type', 'species']}]) }}
+-- The index serves the API, which reads one Pokémon in one scope.
 -- Share of each Pokémon's sets with each nature and EV spread, per report scope. Shares sum to 1 per Pokémon.
 -- spread keeps Smogon's label (e.g. Timid:0/0/4/252/0/252).
 SELECT

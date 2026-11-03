@@ -235,7 +235,7 @@ def usage(
         f"""
         SELECT {USAGE_COLUMNS}
         FROM api.pokemon_usage
-        WHERE {SCOPE_FILTER}
+        WHERE {scope.filter}
         ORDER BY rank, species
         LIMIT %s OFFSET %s
         """,
@@ -263,7 +263,7 @@ def pokemon(
     scope = resolve_scope(conn, format, month, baseline, team_type)
     species_id = to_id(species)
     row = conn.execute(
-        f"SELECT {USAGE_COLUMNS} FROM api.pokemon_usage WHERE {SCOPE_FILTER} AND species = %s",
+        f"SELECT {USAGE_COLUMNS} FROM api.pokemon_usage WHERE {scope.filter} AND species = %s",
         (*scope.args, species_id),
     ).fetchone()
     if row is None:
@@ -272,7 +272,7 @@ def pokemon(
         f"""
         SELECT rank, lead_share, raw_count, raw_lead_share
         FROM api.pokemon_lead
-        WHERE {SCOPE_FILTER} AND species = %s
+        WHERE {scope.filter} AND species = %s
         """,
         (*scope.args, species_id),
     ).fetchone()
@@ -306,7 +306,7 @@ def pokemon_section(
     scope = resolve_scope(conn, format, month, baseline, team_type)
     species_id = to_id(species)
     exists = conn.execute(
-        f"SELECT 1 FROM api.pokemon_usage WHERE {SCOPE_FILTER} AND species = %s", (*scope.args, species_id)
+        f"SELECT 1 FROM api.pokemon_usage WHERE {scope.filter} AND species = %s", (*scope.args, species_id)
     ).fetchone()
     if exists is None:
         raise HTTPException(status_code=404, detail=f"No Smogon usage for {species_id} {scope.describe()}")
@@ -320,8 +320,10 @@ def pokemon_section(
     )
 
 
-# Matches one scope's rows; overall reports have a null team type.
-SCOPE_FILTER = "format = %s AND report_month = %s AND baseline = %s AND team_type IS NOT DISTINCT FROM %s"
+# Matches one scope's rows. Overall reports have a null team type, matched with IS NULL rather than IS NOT DISTINCT
+# FROM, which can't use the models' indexes.
+ALL_TEAMS_FILTER: LiteralString = "format = %s AND report_month = %s AND baseline = %s AND team_type IS NULL"
+TEAM_TYPE_FILTER: LiteralString = "format = %s AND report_month = %s AND baseline = %s AND team_type = %s"
 USAGE_COLUMNS = (
     "rank, species, species_name, usage_share, raw_count, raw_share, real_count, real_share, battle_appearance_rate, "
     "viability_user_count, viability_top_gxe, viability_gxe_p99, viability_gxe_p95"
@@ -339,9 +341,13 @@ class Scope:
     report: dict[str, Any]
 
     @property
-    def args(self) -> tuple[str, date, int, str | None]:
-        """The values for SCOPE_FILTER's placeholders."""
-        return (self.format, self.month, self.baseline, self.team_type)
+    def filter(self) -> LiteralString:
+        """A WHERE condition matching this scope's rows; its values are args."""
+        return scope_filter(self.team_type)
+
+    @property
+    def args(self) -> tuple[str | date | int, ...]:
+        return scope_args(self.format, self.month, self.baseline, self.team_type)
 
     @property
     def echo(self) -> SmogonScope:
@@ -362,14 +368,22 @@ def resolve_scope(conn: Connection, format: str, month: str | None, baseline: in
         f"""
         SELECT usage_source_file_id, chaos_source_file_id, leads_source_file_id, metagame_source_file_id
         FROM api.report
-        WHERE {SCOPE_FILTER}
+        WHERE {scope_filter(type_id)}
         """,
-        (format, report_month, baseline, type_id),
+        scope_args(format, report_month, baseline, type_id),
     ).fetchone()
     scope = Scope(format, report_month, baseline, type_id, report or {})
     if report is None:
         raise HTTPException(status_code=404, detail=f"No Smogon report {scope.describe()}")
     return scope
+
+
+def scope_filter(team_type: str | None) -> LiteralString:
+    return TEAM_TYPE_FILTER if team_type is not None else ALL_TEAMS_FILTER
+
+
+def scope_args(format: str, month: date, baseline: int, team_type: str | None) -> tuple[str | date | int, ...]:
+    return (format, month, baseline) if team_type is None else (format, month, baseline, team_type)
 
 
 def resolve_month(conn: Connection, format: str, month: str | None, baseline: int) -> date:
@@ -390,7 +404,7 @@ def count(conn: Connection, table: LiteralString, scope: Scope, species: str | N
     species_filter: LiteralString = " AND species = %s" if species is not None else ""
     args = (*scope.args, species) if species is not None else scope.args
     row = conn.execute(
-        f"SELECT COUNT(*) AS total FROM api.{table} WHERE {SCOPE_FILTER}{species_filter}", args
+        f"SELECT COUNT(*) AS total FROM api.{table} WHERE {scope.filter}{species_filter}", args
     ).fetchone()
     return row["total"] if row else 0
 
@@ -401,7 +415,7 @@ def section_rows(conn: Connection, section: Section, scope: Scope, species: str,
         f"""
         SELECT {query.columns}
         FROM api.{query.table}
-        WHERE {SCOPE_FILTER} AND species = %s
+        WHERE {scope.filter} AND species = %s
         ORDER BY {query.order}
         LIMIT %s OFFSET %s
         """,
