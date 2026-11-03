@@ -52,8 +52,12 @@ SQL_FILES = [
     "create/staging/schema.sql",
     "create/api/schema.sql",
 ]
-PERMISSION_FILES = ["permissions/showdown_analyst.sql", "permissions/showdown_transform.sql"]
-ROLES = ["doadmin", "showdown-analyst", "showdown-transform"]
+PERMISSION_FILES = [
+    "permissions/showdown_analyst.sql",
+    "permissions/showdown_transform.sql",
+    "permissions/showdown_api.sql",
+]
+ROLES = ["doadmin", "showdown-analyst", "showdown-transform", "showdown-api"]
 PROTECTED_DATABASES = {"showdown-database", "defaultdb"}
 
 
@@ -75,6 +79,11 @@ def schemas(database_url: str) -> None:
         for role in ROLES:
             if role not in existing:
                 conn.execute(sql.SQL("CREATE ROLE {}").format(sql.Identifier(role)))
+        # As in production, doadmin can create roles and administers the project's roles, so the permission files can
+        # set default privileges for showdown-transform and limits on showdown-api.
+        conn.execute("ALTER ROLE doadmin CREATEROLE")
+        for role in ROLES[1:]:
+            conn.execute(sql.SQL("GRANT {} TO doadmin WITH ADMIN OPTION").format(sql.Identifier(role)))
         # doadmin owns the database, as in production, so the permission files can grant and revoke CONNECT on it.
         conn.execute(sql.SQL("ALTER DATABASE {} OWNER TO doadmin").format(sql.Identifier(conn.info.dbname)))
         # showdown_analyst.sql revokes CONNECT on defaultdb, so it has to exist.

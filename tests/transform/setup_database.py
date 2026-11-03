@@ -14,7 +14,7 @@ from psycopg import sql
 ROOT = Path(__file__).resolve().parents[2]
 PROTECTED_DATABASES = {"showdown-database", "defaultdb"}
 # Throwaway passwords for a CI-only server; the workflow passes the same values to dbt.
-ROLES = {"doadmin": "doadmin", "showdown-analyst": "analyst", "showdown-transform": "transform"}
+ROLES = {"doadmin": "doadmin", "showdown-analyst": "analyst", "showdown-transform": "transform", "showdown-api": "api"}
 
 
 def sql_files() -> list[str]:
@@ -36,6 +36,11 @@ def main() -> None:
             conn.execute(
                 sql.SQL("CREATE ROLE {} LOGIN PASSWORD {}").format(sql.Identifier(role), sql.Literal(password))
             )
+        # As in production, doadmin can create roles and administers the project's roles, so the permission files can
+        # set default privileges for showdown-transform and limits on showdown-api.
+        conn.execute("ALTER ROLE doadmin CREATEROLE")
+        for role in list(ROLES)[1:]:
+            conn.execute(sql.SQL("GRANT {} TO doadmin WITH ADMIN OPTION").format(sql.Identifier(role)))
         # doadmin owns the database, as in production, so the permission files can grant and revoke CONNECT on it.
         conn.execute(sql.SQL("ALTER DATABASE {} OWNER TO doadmin").format(sql.Identifier(database)))
         # showdown_analyst.sql revokes CONNECT on defaultdb, so it has to exist.
