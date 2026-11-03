@@ -44,5 +44,5 @@ class Page(BaseModel):
 class Envelope[T](BaseModel):
     scope: SmogonScope
     sources: list[SourceFile] = Field(description="The files behind this data.")
-    data: list[T]
+    data: T
     page: Page | None = Field(None, description="Set when the data is paginated.")
