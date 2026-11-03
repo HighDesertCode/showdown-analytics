@@ -21,3 +21,7 @@ models:
       # Reference data is already clean, so it is published as views rather than copied.
       reference:
         +materialized: view
+      # The replay statistics read these tables as soon as they're built; without fresh statistics (autovacuum
+      # analyzes them only later), Postgres can choose a plan that turns seconds into minutes.
+      battle:
+        +post-hook: "ANALYZE {{ this }}"
