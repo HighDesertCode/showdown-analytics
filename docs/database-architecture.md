@@ -28,9 +28,9 @@ flowchart LR
 | --- | --- | --- |
 | `reference` | Deployed | Pokémon, types, abilities, moves, items, and natures from Showdown |
 | `raw` | Deployed | Smogon's monthly reports and Showdown's replays as published |
-| `staging` | Deployed | Cleaned report data with names matched to `reference` |
+| `staging` | Deployed | Cleaned report and replay data with names matched to `reference` |
 | `api` | Deployed | The published statistics; the only schema the API reads |
-| `research` | Planned (M5) | Private team and battle records, never exposed publicly |
+| `research` | Planned (M6) | Private team and battle records, never exposed publicly |
 
 ## Reference Data
 
