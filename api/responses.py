@@ -26,6 +26,33 @@ class SmogonScope(BaseModel):
     )
 
 
+class ReplayScope(BaseModel):
+    """What a replay statistic covers. The API fills in defaults for any filter left out, and echoes them here."""
+
+    source: Literal["replays"] = Field(
+        "replays",
+        description=(
+            "Public Pokémon Showdown replays: a sample of the battles players chose to upload, not the whole ladder. "
+            "Never comparable to Smogon's statistics."
+        ),
+    )
+    format: str = Field(description="The Showdown format, e.g. gen9monotype.")
+    month: str = Field(description="The UTC month the battles started in, as YYYY-MM.")
+    partial_month: bool = Field(description="True while the month is still in progress, so its counts keep growing.")
+    elo_band: int | None = Field(
+        None,
+        description=(
+            "The Elo band of the player or team counted, by the lower bound of their Showdown Elo before the battle "
+            "(1000, 1200, 1400, or 1600 and up); null for every band, each in its own rows. Elo isn't comparable to "
+            "Smogon's baselines."
+        ),
+    )
+    battle_count: int = Field(description="Battles in the sample that month, rated or not.")
+    rated_battle_count: int = Field(
+        description="Rated battles in the sample that month; the statistics count only these."
+    )
+
+
 class SourceFile(BaseModel):
     """A Smogon file the data was loaded from."""
 
@@ -42,7 +69,9 @@ class Page(BaseModel):
 
 
 class Envelope[T](BaseModel):
-    scope: SmogonScope
-    sources: list[SourceFile] = Field(description="The files behind this data.")
+    scope: SmogonScope | ReplayScope = Field(discriminator="source")
+    sources: list[SourceFile] = Field(
+        description="The Smogon files behind this data; empty for replay data, where each battle is its own source."
+    )
     data: T
     page: Page | None = Field(None, description="Set when the data is paginated.")
