@@ -103,8 +103,18 @@ def test_search_pages(client, battles):
     assert body["page"] == {"limit": 1, "offset": 1, "total": 3}
 
 
+def test_search_treats_overall_as_every_team_type(client, battles):
+    body = search(client, team_type="overall")
+
+    assert body["scope"]["team_type"] is None
+    assert len(body["data"]) == 3
+
+
 def test_search_rejects_a_player_with_no_letters_or_digits(client, battles):
-    assert client.get("/v1/battles", params={"player": "!!"}).status_code == 422
+    response = client.get("/v1/battles", params={"player": "!!"})
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "'!!' isn't a player name"}
 
 
 def test_battle_has_its_rules_and_both_previewed_teams(client, insert, battles):

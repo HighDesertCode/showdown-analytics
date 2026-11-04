@@ -133,6 +133,18 @@ def test_usage_accepts_a_team_type_by_name_or_id(client, insert, team_type):
     assert [row["species"] for row in body["data"]] == ["swampert"]
 
 
+def test_usage_treats_overall_as_all_teams(client, insert):
+    add_report(insert)
+    add_report(insert, team_type="water", first_file_id=11)
+    add_usage(insert, 1, "greattusk", "Great Tusk")
+    add_usage(insert, 1, "swampert", "Swampert", team_type="water")
+
+    body = client.get("/v1/smogon/usage", params={"team_type": "overall"}).json()
+
+    assert body["scope"]["team_type"] is None
+    assert [row["species"] for row in body["data"]] == ["greattusk"]
+
+
 def test_usage_pages(client, insert):
     add_report(insert)
     for rank, species in enumerate(["swampert", "greattusk", "corviknight"], start=1):
@@ -276,6 +288,14 @@ def test_pokemon_profile_explains_a_pokemon_missing_from_the_scope(client, inser
     assert response.json() == {
         "detail": "No Smogon usage for greattusk for gen9monotype in 2026-09 at baseline 1630 (all teams)"
     }
+
+
+@pytest.mark.parametrize("path", ["/v1/smogon/pokemon/!!!", "/v1/smogon/pokemon/!!!/moves"])
+def test_pokemon_rejects_a_species_with_no_letters_or_digits(client, insert, path):
+    response = client.get(path)
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "'!!!' isn't a species"}
 
 
 def test_pokemon_section_lists_every_row_by_page(client, insert):
@@ -444,6 +464,15 @@ def test_type_matchups_filters_by_type_and_opponent(client, insert):
 
     assert [(row["type"], row["opponent_type"]) for row in body["data"]] == [("water", "ground")]
     assert body["page"]["total"] == 1
+
+
+def test_type_matchups_reject_a_type_with_no_letters_or_digits(client, insert):
+    add_chart(insert)
+
+    response = client.get("/v1/smogon/type-matchups", params={"type": "!"})
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "'!' isn't a type"}
 
 
 def test_type_matchups_explains_a_missing_chart(client, insert):

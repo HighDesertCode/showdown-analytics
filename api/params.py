@@ -2,6 +2,7 @@
 
 import re
 from datetime import date
+from enum import IntEnum
 from typing import Annotated
 
 from fastapi import HTTPException, Query
@@ -10,6 +11,16 @@ DEFAULT_FORMAT = "gen9monotype"
 # REPORT.md recommends 1630 as the default view; the baseline is always echoed in the scope.
 DEFAULT_BASELINE = 1630
 MONTH_PATTERN = r"^\d{4}-(0[1-9]|1[0-2])$"
+
+
+class Band(IntEnum):
+    """Showdown Elo bands, by their lower bound."""
+
+    floor = 1000
+    elo_1200 = 1200
+    elo_1400 = 1400
+    elo_1600 = 1600
+
 
 Format = Annotated[str, Query(description="The Showdown format.")]
 Month = Annotated[
@@ -22,7 +33,22 @@ Baseline = Annotated[
 ]
 TeamType = Annotated[
     str | None,
-    Query(description="A team type, e.g. water or Water, for teams of that type only. Leave out for all teams."),
+    Query(
+        description=(
+            "A team type, e.g. water or Water, for teams of that type only: Smogon's per-type report, or replay teams "
+            "whose six previewed Pokémon share that type. Leave out, or pass overall, for all teams."
+        )
+    ),
+]
+Type = Annotated[str | None, Query(description="A type, e.g. water or Water. Leave out for every type.")]
+EloBand = Annotated[
+    Band | None,
+    Query(
+        description=(
+            "Only this Elo band: the lower bound of the player's Showdown Elo before the battle (1000 is the ladder's "
+            "floor, up to 1199; 1600 means 1600 and up). Leave out for every band."
+        )
+    ),
 ]
 Limit = Annotated[int, Query(ge=1, le=500, description="The most rows to return.")]
 Offset = Annotated[int, Query(ge=0, description="Rows to skip, for the next page.")]
@@ -33,6 +59,25 @@ def to_id(name: str) -> str:
     return re.sub(r"[^a-z0-9]", "", name.lower())
 
 
+def showdown_id(name: str, what: str) -> str:
+    """The Showdown ID of a name a client sent; a 422 naming what was expected when no letters or digits are left."""
+    result = to_id(name)
+    if not result:
+        raise HTTPException(status_code=422, detail=f"{name!r} isn't a {what}")
+    return result
+
+
+def optional_id(name: str | None, what: str) -> str | None:
+    """showdown_id for a filter that may be left out."""
+    return showdown_id(name, what) if name is not None else None
+
+
+def type_id(name: str | None) -> str | None:
+    """A type filter's Showdown ID, or None for every type: left out, or overall."""
+    result = optional_id(name, "type")
+    return None if result == "overall" else result
+
+
 def parse_month(month: str) -> date:
     year, number = month.split("-")
     return date(int(year), int(number), 1)
@@ -40,23 +85,3 @@ def parse_month(month: str) -> date:
 
 def format_month(month: date) -> str:
     return month.strftime("%Y-%m")
-
-
-def team_type_id(team_type: str | None) -> str | None:
-    """The team type's Showdown ID, or None for all teams (left out, or "overall")."""
-    if team_type is None or to_id(team_type) == "overall":
-        return None
-    return type_id(team_type)
-
-
-Type = Annotated[str | None, Query(description="A type, e.g. water or Water. Leave out for every type.")]
-
-
-def type_id(type_name: str | None) -> str | None:
-    """A type's Showdown ID, or None when left out."""
-    if type_name is None:
-        return None
-    showdown_id = to_id(type_name)
-    if not showdown_id:
-        raise HTTPException(status_code=422, detail=f"{type_name!r} isn't a type")
-    return showdown_id

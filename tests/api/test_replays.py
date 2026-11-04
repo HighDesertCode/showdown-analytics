@@ -151,6 +151,40 @@ def test_leads_put_the_most_common_lead_first_within_each_type(client, insert):
     ]
 
 
+@pytest.mark.parametrize("params", [{}, {"team_type": "overall"}])
+def test_leads_list_every_type_when_the_filter_is_left_out_or_overall(client, insert, params):
+    add_sample(insert)
+    for species_id, species, team_type in ((1, "pelipper", "water"), (2, "charizard", "fire")):
+        insert(
+            "replay_lead",
+            format="gen9monotype",
+            report_month=SEPTEMBER,
+            elo_band=1200,
+            team_type=team_type,
+            species_id=species_id,
+            species=species,
+            species_name=species.title(),
+            lead_count=10,
+            team_count=10,
+            lead_share=1,
+            win_count=5,
+            win_rate=0.5,
+        )
+
+    body = client.get("/v1/replays/leads", params=params).json()
+
+    assert [row["team_type"] for row in body["data"]] == ["fire", "water"]
+
+
+def test_leads_reject_a_type_with_no_letters_or_digits(client, insert):
+    add_sample(insert)
+
+    response = client.get("/v1/replays/leads", params={"team_type": "!"})
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "'!' isn't a type"}
+
+
 def test_move_damage_filters_by_attacker_and_move_by_name(client, insert):
     add_sample(insert)
     species_ids = {"swampert": 1, "garchomp": 2}

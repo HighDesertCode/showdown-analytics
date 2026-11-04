@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Path
 from pydantic import BaseModel, Field
 
 from api.db import Connection
-from api.params import Limit, Offset, to_id
+from api.params import Limit, Offset, showdown_id
 from api.responses import Envelope, Page, ReferenceScope
 
 router = APIRouter(prefix="/v1/reference", tags=["Reference data"])
@@ -140,12 +140,12 @@ def entry(
 ) -> Envelope[ReferenceRow]:
     """One entry, by Showdown ID or name."""
     query = KINDS[kind]
-    showdown_id = to_id(name)
+    entry_id = showdown_id(name, query.view)
     row = conn.execute(
-        f"SELECT {query.columns} FROM api.{query.view} WHERE {query.id_column} = %s", (showdown_id,)
+        f"SELECT {query.columns} FROM api.{query.view} WHERE {query.id_column} = %s", (entry_id,)
     ).fetchone()
     if row is None:
-        raise HTTPException(status_code=404, detail=f"No {kind.value} entry {showdown_id or name!r}")
+        raise HTTPException(status_code=404, detail=f"No {kind.value} entry {entry_id!r}")
     return Envelope(scope=ReferenceScope(), sources=[], data=build(query, row))
 
 

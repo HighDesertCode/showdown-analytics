@@ -21,8 +21,7 @@ from api.params import (
     Type,
     format_month,
     parse_month,
-    team_type_id,
-    to_id,
+    showdown_id,
     type_id,
 )
 from api.responses import Envelope, Page, SmogonScope, SourceFile
@@ -328,8 +327,8 @@ def pokemon(
 ) -> Envelope[PokemonProfile]:
     """One Pokémon in one scope: its usage, how often it leads, and its most common abilities, items, moves,
     spreads, teammates, and checks and counters. Each list's full version is at /pokemon/{species}/{section}."""
+    species_id = showdown_id(species, "species")
     scope = resolve_scope(conn, format, month, baseline, team_type)
-    species_id = to_id(species)
     row = conn.execute(
         f"SELECT {USAGE_COLUMNS} FROM api.pokemon_usage WHERE {scope.filter} AND species = %s",
         (*scope.args, species_id),
@@ -371,8 +370,8 @@ def pokemon_section(
 ) -> Envelope[SectionRows]:
     """Every ability, item, move, spread, teammate, or check and counter Smogon lists for one Pokémon in one scope,
     most common first (counters by Smogon's score)."""
+    species_id = showdown_id(species, "species")
     scope = resolve_scope(conn, format, month, baseline, team_type)
-    species_id = to_id(species)
     exists = conn.execute(
         f"SELECT 1 FROM api.pokemon_usage WHERE {scope.filter} AND species = %s", (*scope.args, species_id)
     ).fetchone()
@@ -583,17 +582,17 @@ class Scope:
 def resolve_scope(conn: Connection, format: str, month: str | None, baseline: int, team_type: str | None) -> Scope:
     """Fills in the default month and reads the scope's report row; a 404 when Smogon published no report for it."""
     report_month = resolve_month(conn, format, month, baseline)
-    type_id = team_type_id(team_type)
+    team = type_id(team_type)
     report = conn.execute(
         f"""
         SELECT battle_count, avg_team_weight, stalliness_mean, usage_source_file_id, chaos_source_file_id,
             leads_source_file_id, metagame_source_file_id
         FROM api.report
-        WHERE {scope_filter(type_id)}
+        WHERE {scope_filter(team)}
         """,
-        scope_args(format, report_month, baseline, type_id),
+        scope_args(format, report_month, baseline, team),
     ).fetchone()
-    scope = Scope(format, report_month, baseline, type_id, report or {})
+    scope = Scope(format, report_month, baseline, team, report or {})
     if report is None:
         raise HTTPException(status_code=404, detail=f"No Smogon report {scope.describe()}")
     return scope

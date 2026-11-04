@@ -7,8 +7,19 @@ from fastapi import APIRouter, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
 from api.db import Connection
-from api.params import DEFAULT_FORMAT, Format, Limit, Month, Offset, format_month, parse_month, to_id, type_id
-from api.replays import EloBand
+from api.params import (
+    DEFAULT_FORMAT,
+    EloBand,
+    Format,
+    Limit,
+    Month,
+    Offset,
+    TeamType,
+    format_month,
+    optional_id,
+    parse_month,
+    type_id,
+)
 from api.responses import BattleScope, Envelope, Page
 
 router = APIRouter(prefix="/v1/battles", tags=["Battles"])
@@ -106,9 +117,7 @@ def search(
     format: Format = DEFAULT_FORMAT,
     month: Month = None,
     rated: Annotated[bool | None, Query(description="Only rated (true) or unrated (false) battles.")] = None,
-    team_type: Annotated[
-        str | None, Query(description="Only battles where a side's team had this inferred type, e.g. water.")
-    ] = None,
+    team_type: TeamType = None,
     elo_band: EloBand = None,
     player: Annotated[str | None, Query(description="Only battles this player played, by name or user ID.")] = None,
     limit: Limit = 50,
@@ -117,9 +126,7 @@ def search(
     """Public replays, newest first. Team type, Elo band, and player all apply to the same side, so
     player=X&team_type=water finds the battles X played with a Water team."""
     type_filter = type_id(team_type)
-    player_id = to_id(player) if player is not None else None
-    if player is not None and not player_id:
-        raise HTTPException(status_code=422, detail=f"{player!r} has no letters or digits")
+    player_id = optional_id(player, "player name")
     band = int(elo_band) if elo_band is not None else None
 
     conditions: list[LiteralString] = ["battle.format = %s"]

@@ -5,38 +5,29 @@ They count rated battles only, and are kept apart from Smogon's ladder-wide stat
 
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
-from enum import IntEnum
 from typing import Annotated, Any, LiteralString
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from api.db import Connection
-from api.params import DEFAULT_FORMAT, Format, Limit, Month, Offset, Type, format_month, parse_month, to_id, type_id
+from api.params import (
+    DEFAULT_FORMAT,
+    EloBand,
+    Format,
+    Limit,
+    Month,
+    Offset,
+    TeamType,
+    Type,
+    format_month,
+    optional_id,
+    parse_month,
+    type_id,
+)
 from api.responses import Envelope, Page, ReplayScope
 
 router = APIRouter(prefix="/v1/replays", tags=["Replay statistics"])
-
-
-class Band(IntEnum):
-    """Showdown Elo bands, by their lower bound."""
-
-    floor = 1000
-    elo_1200 = 1200
-    elo_1400 = 1400
-    elo_1600 = 1600
-
-
-EloBand = Annotated[
-    Band | None,
-    Query(
-        description=(
-            "Only this Elo band: the lower bound of the player's Showdown Elo before the battle (1000 is the ladder's "
-            "floor, up to 1199; 1600 means 1600 and up). Leave out for every band, each in its own rows."
-        )
-    ),
-]
-TeamType = Annotated[str | None, Query(description="Only teams of this inferred type, e.g. water or Water.")]
 
 
 class BandSample(BaseModel):
@@ -204,7 +195,7 @@ def move_damage(
         scope,
         "replay_move_damage",
         "elo_band, species, species_name, move, move_name, hit_count, mean_damage_percent, knockout_count",
-        [("species = %s", optional_id(species)), ("move = %s", optional_id(move))],
+        [("species = %s", optional_id(species, "species")), ("move = %s", optional_id(move, "move"))],
         "elo_band, hit_count DESC, species, move",
         limit,
         offset,
@@ -333,12 +324,3 @@ def page_rows(
         (*args, limit, offset),
     ).fetchall()
     return rows, total["total"] if total else 0
-
-
-def optional_id(name: str | None) -> str | None:
-    if name is None:
-        return None
-    showdown_id = to_id(name)
-    if not showdown_id:
-        raise HTTPException(status_code=422, detail=f"{name!r} has no letters or digits")
-    return showdown_id
