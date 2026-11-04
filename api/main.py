@@ -5,15 +5,21 @@ from contextlib import asynccontextmanager
 from importlib.metadata import version
 
 import psycopg
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from psycopg_pool import ConnectionPool
 
 from api import battles, reference, replays, smogon
 from api.db import create_pool
+from api.responses import SERVICE_UNAVAILABLE
 
 # How long the health check waits for a connection before reporting the database unavailable.
 HEALTH_TIMEOUT_SECONDS = 5
+# What a 503 tells the client, and how long it suggests waiting before trying again.
+RETRY_AFTER_SECONDS = 5
+QUERY_TIMEOUT_DETAIL = "The query took too long; try again shortly, with a smaller limit or a narrower filter."
+UNAVAILABLE_DETAIL = "Database unavailable; try again shortly."
 # What an agent reads first: the sources, why they're never comparable, and the shape every response shares.
 DESCRIPTION = (
     "Competitive Pokémon statistics for Gen 9 Monotype, from two sources that are never comparable: Smogon's monthly "
@@ -71,6 +77,7 @@ def create_app(pool: ConnectionPool | None = None) -> FastAPI:
         description=DESCRIPTION,
         openapi_tags=TAGS,
         generate_unique_id_function=operation_id,
+        responses=SERVICE_UNAVAILABLE,
         lifespan=lifespan,
     )
     app.include_router(smogon.router)
@@ -80,13 +87,21 @@ def create_app(pool: ConnectionPool | None = None) -> FastAPI:
 
     @app.get("/health")
     def health(request: Request) -> dict[str, str]:
-        """Whether the API is running and can reach the database."""
-        try:
-            with request.app.state.pool.connection(timeout=HEALTH_TIMEOUT_SECONDS) as conn:
-                conn.execute("SELECT 1")
-        except psycopg.Error as error:
-            raise HTTPException(status_code=503, detail="Database unavailable") from error
+        """Whether the API is running and can reach the database; a 503 when it can't."""
+        with request.app.state.pool.connection(timeout=HEALTH_TIMEOUT_SECONDS) as conn:
+            conn.execute("SELECT 1")
         return {"status": "ok"}
+
+    @app.exception_handler(psycopg.OperationalError)
+    def database_unavailable(request: Request, error: psycopg.OperationalError) -> JSONResponse:
+        """A 503 when the database can't answer: no free connection, a lost one, or a query past the statement
+        timeout, which psycopg raises as QueryCanceled."""
+        timed_out = isinstance(error, psycopg.errors.QueryCanceled)
+        return JSONResponse(
+            status_code=503,
+            content={"detail": QUERY_TIMEOUT_DETAIL if timed_out else UNAVAILABLE_DETAIL},
+            headers={"Retry-After": str(RETRY_AFTER_SECONDS)},
+        )
 
     return app
 

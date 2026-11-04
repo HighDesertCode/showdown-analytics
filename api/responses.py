@@ -120,3 +120,11 @@ class Error(BaseModel):
 NOT_FOUND: dict[int | str, dict[str, Any]] = {
     404: {"model": Error, "description": "Nothing matches the request; detail says what wasn't found."}
 }
+# The 503 any request can answer, declared on every route.
+SERVICE_UNAVAILABLE: dict[int | str, dict[str, Any]] = {
+    503: {
+        "model": Error,
+        "description": "The database couldn't answer: no connection was free, one was lost, or the query passed the "
+        "5-second limit. Retry after the seconds in the Retry-After header.",
+    }
+}

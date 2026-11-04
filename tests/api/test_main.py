@@ -1,3 +1,4 @@
+import psycopg
 import pytest
 from fastapi.testclient import TestClient
 from psycopg.rows import dict_row
@@ -14,14 +15,36 @@ def test_health_reports_ok_when_the_database_answers(client):
     assert response.json() == {"status": "ok"}
 
 
-def test_health_reports_unavailable_when_the_database_is_unreachable():
+def unreachable_pool() -> ConnectionPool:
     # Nothing listens on port 1, so every connection attempt fails.
-    pool = ConnectionPool("postgresql://localhost:1/none", min_size=1, max_size=1, open=False, timeout=1)
-    with TestClient(create_app(pool)) as client:
+    return ConnectionPool("postgresql://localhost:1/none", min_size=1, max_size=1, open=False, timeout=1)
+
+
+def test_health_reports_unavailable_when_the_database_is_unreachable(monkeypatch):
+    monkeypatch.setattr("api.main.HEALTH_TIMEOUT_SECONDS", 1)
+    with TestClient(create_app(unreachable_pool())) as client:
         response = client.get("/health")
 
     assert response.status_code == 503
-    assert response.json() == {"detail": "Database unavailable"}
+    assert response.headers["retry-after"] == "5"
+    assert response.json() == {"detail": "Database unavailable; try again shortly."}
+
+
+def test_a_query_past_the_statement_timeout_is_a_503_with_a_retry_hint():
+    app = create_app(unreachable_pool())
+
+    @app.get("/timeout")
+    def timeout() -> None:
+        raise psycopg.errors.QueryCanceled("canceling statement due to statement timeout")
+
+    with TestClient(app) as client:
+        response = client.get("/timeout")
+
+    assert response.status_code == 503
+    assert response.headers["retry-after"] == "5"
+    assert response.json() == {
+        "detail": "The query took too long; try again shortly, with a smaller limit or a narrower filter."
+    }
 
 
 def test_openapi_serves_every_endpoint(client):
