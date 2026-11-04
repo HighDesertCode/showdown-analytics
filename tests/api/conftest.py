@@ -2,11 +2,13 @@
 
 The database fixtures come from tests/pipelines/conftest.py, which builds the schemas and runs the permission
 files, so the API is tested with the same grants it has in production. The api tables are created from the dbt
-models' contracts, so a query that uses a column the contract doesn't publish fails here.
+models' contracts with their constraints, so a query that uses a column the contract doesn't publish fails
+here, and so does a fixture row the table could never hold in production.
 """
 
 import importlib.util
 from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, LiteralString, cast
 
@@ -33,14 +35,37 @@ schemas = _pipelines_conftest.schemas
 Insert = Callable[..., None]
 
 
-def api_contracts() -> dict[str, list[tuple[str, str]]]:
-    """Each api model's columns and types, from its YAML contract."""
+@dataclass(frozen=True)
+class Contract:
+    """An api model's contract: its columns and types, and the constraints dbt enforces on the table."""
+
+    columns: list[tuple[str, str]]
+    not_null: list[str]
+    primary_key: list[str]
+    checks: list[str]
+
+
+def api_contracts() -> dict[str, Contract]:
+    """Each api model's contract, from its YAML."""
     contracts = {}
     for path in sorted(API_MODELS.rglob("*.yml")):
         if path.name.endswith("_unit_tests.yml"):
             continue
         for model in yaml.safe_load(path.read_text()).get("models", []):
-            contracts[model["name"]] = [(column["name"], column["data_type"]) for column in model["columns"]]
+            columns = model["columns"]
+            constraints = [c for column in columns for c in column.get("constraints", [])] + model.get(
+                "constraints", []
+            )
+            contracts[model["name"]] = Contract(
+                columns=[(column["name"], column["data_type"]) for column in columns],
+                not_null=[
+                    column["name"]
+                    for column in columns
+                    if any(c["type"] == "not_null" for c in column.get("constraints", []))
+                ],
+                primary_key=[name for c in constraints if c["type"] == "primary_key" for name in c["columns"]],
+                checks=[c["expression"] for c in constraints if c["type"] == "check"],
+            )
     return contracts
 
 
@@ -48,19 +73,30 @@ def api_contracts() -> dict[str, list[tuple[str, str]]]:
 def api_tables(database_url: str, schemas: None) -> list[str]:
     """Creates every api model as an empty table, as showdown-transform, as dbt does in production.
 
-    The column types come from the repo's own contracts, so they're trusted as SQL.
+    Each table gets its contract's NOT NULL, PRIMARY KEY, and CHECK constraints, so a fixture row production could
+    never hold fails here. The types and expressions come from the repo's own contracts, so they're trusted as SQL.
     """
     contracts = api_contracts()
     with psycopg.connect(database_url, autocommit=True) as conn:
         conn.execute('SET ROLE "showdown-transform"')
-        for name, columns in contracts.items():
+        for name, contract in contracts.items():
             table = sql.Identifier("api", name)
             conn.execute(sql.SQL("DROP TABLE IF EXISTS {}").format(table))
-            definitions = sql.SQL(", ").join(
-                sql.SQL("{} {}").format(sql.Identifier(column), sql.SQL(cast(LiteralString, data_type.upper())))
-                for column, data_type in columns
-            )
-            conn.execute(sql.SQL("CREATE TABLE {} ({})").format(table, definitions))
+            definitions = [
+                sql.SQL("{} {}{}").format(
+                    sql.Identifier(column),
+                    sql.SQL(cast(LiteralString, data_type.upper())),
+                    sql.SQL(" NOT NULL" if column in contract.not_null else ""),
+                )
+                for column, data_type in contract.columns
+            ]
+            if contract.primary_key:
+                keys = sql.SQL(", ").join(map(sql.Identifier, contract.primary_key))
+                definitions.append(sql.SQL("PRIMARY KEY ({})").format(keys))
+            definitions += [
+                sql.SQL("CHECK ({})").format(sql.SQL(cast(LiteralString, check))) for check in contract.checks
+            ]
+            conn.execute(sql.SQL("CREATE TABLE {} ({})").format(table, sql.SQL(", ").join(definitions)))
     return list(contracts)
 
 

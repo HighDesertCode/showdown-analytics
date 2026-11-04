@@ -94,7 +94,9 @@ class MoveDamage(BaseModel):
 
 class HazardDamage(BaseModel):
     elo_band: int = Field(description="The Elo band of the team taking the damage.")
-    team_type: str | None = Field(description="That team's inferred type; null when it has none.")
+    team_type: str = Field(
+        description="That team's inferred type, as a Showdown ID. Teams without an inferred type aren't counted."
+    )
     hazard: str = Field(description="Stealth Rock or Spikes, as the log names it.")
     hit_count: int = Field(description="Times a Pokémon took damage from this hazard on switching in.")
     mean_damage_percent: float = Field(description="Mean damage per hit, as a percent (0 to 100) of max HP.")
@@ -233,7 +235,7 @@ def hazard_damage(
         "replay_hazard_damage",
         "elo_band, team_type, hazard, hit_count, mean_damage_percent, knockout_count",
         [("team_type = %s", type_id(team_type))],
-        "elo_band, team_type NULLS LAST, hazard",
+        "elo_band, team_type, hazard",
         limit,
         offset,
     )

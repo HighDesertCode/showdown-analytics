@@ -121,7 +121,7 @@ models:
         description: >
           Teams of this type and band that sent out a lead, the denominator of lead_share. A battle forfeited at team
           preview has no lead.
-        data_type: numeric
+        data_type: bigint
         constraints: [{type: not_null}]
       - name: lead_share
         description: lead_count / team_count; sums to 1 per type and band.

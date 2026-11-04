@@ -5,6 +5,7 @@ import pytest
 RETRIEVED_AT = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
 SEPTEMBER = date(2026, 9, 1)
 AUGUST = date(2026, 8, 1)
+TYPE_IDS = {"water": 11, "ground": 5}
 
 
 def add_report(insert, month=SEPTEMBER, baseline=1630, team_type=None, first_file_id=1):
@@ -171,8 +172,8 @@ def test_usage_rejects_invalid_parameters(client, insert, params):
     assert response.status_code == 422
 
 
-def add_rows(insert, table, species, rows, team_type=None):
-    """Rows of one of a Pokémon's sections in the September 1630 scope."""
+def add_rows(insert, table, rows, team_type=None):
+    """Swampert's rows in one of its sections, in the September 1630 scope."""
     for row in rows:
         insert(
             table,
@@ -180,7 +181,9 @@ def add_rows(insert, table, species, rows, team_type=None):
             report_month=SEPTEMBER,
             baseline=1630,
             team_type=team_type,
-            species=species,
+            species_id=1,
+            species="swampert",
+            species_name="Swampert",
             source_file_id=2,
             **row,
         )
@@ -192,24 +195,25 @@ def add_swampert(insert):
     add_rows(
         insert,
         "pokemon_move",
-        "swampert",
-        [{"move": f"move{number:02}", "move_name": f"Move {number}", "share": number / 20} for number in range(1, 13)],
+        [
+            {"move_id": number, "move": f"move{number:02}", "move_name": f"Move {number}", "share": number / 20}
+            for number in range(1, 13)
+        ],
     )
     add_rows(
         insert,
         "pokemon_item",
-        "swampert",
         [
-            {"has_item": True, "item": "leftovers", "item_name": "Leftovers", "share": 0.59},
-            {"has_item": False, "item": None, "item_name": None, "share": 0.41},
+            {"has_item": True, "item_id": 1, "item": "leftovers", "item_name": "Leftovers", "share": 0.59},
+            {"has_item": False, "item_id": None, "item": None, "item_name": None, "share": 0.41},
         ],
     )
     add_rows(
         insert,
         "pokemon_counter",
-        "swampert",
         [
             {
+                "opponent_species_id": opponent_id,
                 "opponent_species": opponent,
                 "opponent_species_name": opponent.title(),
                 "encounters": 100.0,
@@ -217,7 +221,7 @@ def add_swampert(insert):
                 "ko_or_switch_rate_std_dev": 0.05,
                 "score": score,
             }
-            for opponent, score in (("ogerpon", 0.3), ("meowscarada", 0.5))
+            for opponent_id, opponent, score in ((2, "ogerpon", 0.3), (3, "meowscarada", 0.5))
         ],
     )
 
@@ -229,7 +233,9 @@ def test_pokemon_profile_has_usage_and_the_top_ten_of_each_section(client, inser
         format="gen9monotype",
         report_month=SEPTEMBER,
         baseline=1630,
+        species_id=1,
         species="swampert",
+        species_name="Swampert",
         rank=3,
         lead_share=0.04,
         raw_count=812,
@@ -314,6 +320,7 @@ def test_leads_ranks_pokemon_and_cites_the_leads_file(client, insert):
             format="gen9monotype",
             report_month=SEPTEMBER,
             baseline=1630,
+            species_id=rank,
             species=species,
             species_name=species.title(),
             rank=rank,
@@ -383,8 +390,10 @@ def add_chart(insert, month=SEPTEMBER, baseline=1630, source_file_id=50):
                 format="gen9monotype",
                 report_month=month,
                 baseline=baseline,
+                type_id=TYPE_IDS[type_],
                 type=type_,
                 type_name=type_.title(),
+                opponent_type_id=TYPE_IDS[opponent],
                 opponent_type=opponent,
                 opponent_type_name=opponent.title(),
                 is_mirror=type_ == opponent,
@@ -398,6 +407,7 @@ def add_chart(insert, month=SEPTEMBER, baseline=1630, source_file_id=50):
             format="gen9monotype",
             report_month=month,
             baseline=baseline,
+            type_id=TYPE_IDS[type_],
             type=type_,
             type_name=type_.title(),
             viability_score=score,

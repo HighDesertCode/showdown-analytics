@@ -4,6 +4,7 @@ import pytest
 
 SEPTEMBER = date(2026, 9, 1)
 AUGUST = date(2026, 8, 1)
+TYPE_IDS = {"water": 11, "ground": 5}
 
 
 def add_sample(insert, month=SEPTEMBER, bands=(1000, 1200, 1400, 1600)):
@@ -26,8 +27,10 @@ def add_matchup(insert, band, type_, opponent, battles, wins, month=SEPTEMBER):
         format="gen9monotype",
         report_month=month,
         elo_band=band,
+        type_id=TYPE_IDS[type_],
         type=type_,
         type_name=type_.title(),
+        opponent_type_id=TYPE_IDS[opponent],
         opponent_type=opponent,
         opponent_type_name=opponent.title(),
         is_mirror=type_ == opponent,
@@ -123,13 +126,14 @@ def test_type_matchups_list_every_band_in_order(client, insert):
 
 def test_leads_put_the_most_common_lead_first_within_each_type(client, insert):
     add_sample(insert)
-    for species, lead_count in (("pelipper", 30), ("barraskewda", 50)):
+    for species_id, species, lead_count in ((1, "pelipper", 30), (2, "barraskewda", 50)):
         insert(
             "replay_lead",
             format="gen9monotype",
             report_month=SEPTEMBER,
             elo_band=1200,
             team_type="water",
+            species_id=species_id,
             species=species,
             species_name=species.title(),
             lead_count=lead_count,
@@ -149,6 +153,8 @@ def test_leads_put_the_most_common_lead_first_within_each_type(client, insert):
 
 def test_move_damage_filters_by_attacker_and_move_by_name(client, insert):
     add_sample(insert)
+    species_ids = {"swampert": 1, "garchomp": 2}
+    move_ids = {"earthquake": 1, "flipturn": 2}
     hits_by_attack = (("swampert", "earthquake", 40), ("swampert", "flipturn", 25), ("garchomp", "earthquake", 60))
     for species, move, hits in hits_by_attack:
         insert(
@@ -156,8 +162,10 @@ def test_move_damage_filters_by_attacker_and_move_by_name(client, insert):
             format="gen9monotype",
             report_month=SEPTEMBER,
             elo_band=1200,
+            species_id=species_ids[species],
             species=species,
             species_name=species.title(),
+            move_id=move_ids[move],
             move=move,
             move_name=move.title(),
             hit_count=hits,
@@ -172,14 +180,15 @@ def test_move_damage_filters_by_attacker_and_move_by_name(client, insert):
     assert [row["species"] for row in by_move["data"]] == ["garchomp", "swampert"]
 
 
-def test_hazard_damage_lists_teams_without_a_type_last(client, insert):
+def test_hazard_damage_orders_by_band_type_and_hazard(client, insert):
     add_sample(insert)
-    for team_type, hazard in (("water", "Stealth Rock"), (None, "Spikes"), ("fire", "Stealth Rock")):
+    rows = ((1200, "water", "Stealth Rock"), (1000, "water", "Spikes"), (1000, "fire", "Stealth Rock"))
+    for elo_band, team_type, hazard in rows:
         insert(
             "replay_hazard_damage",
             format="gen9monotype",
             report_month=SEPTEMBER,
-            elo_band=1000,
+            elo_band=elo_band,
             team_type=team_type,
             hazard=hazard,
             hit_count=100,
@@ -189,4 +198,8 @@ def test_hazard_damage_lists_teams_without_a_type_last(client, insert):
 
     body = client.get("/v1/replays/hazard-damage").json()
 
-    assert [row["team_type"] for row in body["data"]] == ["fire", "water", None]
+    assert [(row["elo_band"], row["team_type"], row["hazard"]) for row in body["data"]] == [
+        (1000, "fire", "Stealth Rock"),
+        (1000, "water", "Spikes"),
+        (1200, "water", "Stealth Rock"),
+    ]
