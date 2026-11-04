@@ -65,6 +65,15 @@ def test_a_name_with_no_letters_or_digits_is_rejected_before_any_lookup(client, 
     assert response.json() == {"detail": detail}
 
 
+@pytest.mark.parametrize("path", ["/v1/smogon/usage", "/v1/replays/sample", "/v1/battles"])
+@pytest.mark.parametrize("month", ["0000-01", "9999-12", "1999-12"])
+def test_a_month_outside_2000_to_2099_is_rejected_rather_than_failing(client, path, month):
+    # The date helpers can't build year 0, or the end of 9999-12, so these must never reach them.
+    response = client.get(path, params={"month": month})
+
+    assert response.status_code == 422
+
+
 def test_openapi_names_each_operation_after_its_group_and_endpoint():
     spec = create_app().openapi()
 

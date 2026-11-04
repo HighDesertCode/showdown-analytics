@@ -10,7 +10,9 @@ from fastapi import HTTPException, Query
 DEFAULT_FORMAT = "gen9monotype"
 # REPORT.md recommends 1630 as the default view; the baseline is always echoed in the scope.
 DEFAULT_BASELINE = 1630
-MONTH_PATTERN = r"^\d{4}-(0[1-9]|1[0-2])$"
+# Years 2000 to 2099: every month the data could cover, and none the date helpers can't represent (year 0, or a
+# battle search in 9999-12, whose end would fall in year 10000).
+MONTH_PATTERN = r"^20\d{2}-(0[1-9]|1[0-2])$"
 
 
 class Band(IntEnum):
