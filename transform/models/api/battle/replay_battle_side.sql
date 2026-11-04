@@ -5,7 +5,7 @@ SELECT
     replay_id,
     side,
     player,
-    REGEXP_REPLACE(LOWER(player), '[^a-z0-9]', '', 'g') AS player_id,
+    {{ to_id('player') }} AS player_id,
     elo_before,
     elo_after,
     elo_band,
