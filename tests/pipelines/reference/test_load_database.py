@@ -1,4 +1,4 @@
-"""Runs the reference loaders against real tables built from sql/ (see tests/pipelines/conftest.py)."""
+"""Runs the reference loaders against real tables built from sql/ (see tests/conftest.py)."""
 
 import copy
 from typing import Any

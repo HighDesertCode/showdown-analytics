@@ -1,4 +1,4 @@
-"""Checks database-level privileges from sql/permissions/ (see tests/pipelines/conftest.py)."""
+"""Checks database-level privileges from sql/permissions/ (see tests/conftest.py)."""
 
 import psycopg
 import pytest

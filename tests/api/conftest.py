@@ -1,12 +1,11 @@
 """Fixtures for the API tests, which run against the test database as showdown-api.
 
-The database fixtures come from tests/pipelines/conftest.py, which builds the schemas and runs the permission
-files, so the API is tested with the same grants it has in production. The api tables are created from the dbt
-models' contracts with their constraints, so a query that uses a column the contract doesn't publish fails
-here, and so does a fixture row the table could never hold in production.
+The database fixtures come from tests/conftest.py, which builds the schemas and runs the permission files, so the
+API is tested with the same grants it has in production. The api tables are created from the dbt models' contracts
+with their constraints, so a query that uses a column the contract doesn't publish fails here, and so does a fixture
+row the table could never hold in production.
 """
 
-import importlib.util
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,14 +23,6 @@ from api.main import create_app
 
 ROOT = Path(__file__).parents[2]
 API_MODELS = ROOT / "transform" / "models" / "api"
-
-_spec = importlib.util.spec_from_file_location("pipelines_conftest", ROOT / "tests" / "pipelines" / "conftest.py")
-assert _spec and _spec.loader
-_pipelines_conftest = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_pipelines_conftest)
-
-database_url = _pipelines_conftest.database_url
-schemas = _pipelines_conftest.schemas
 
 Insert = Callable[..., None]
 

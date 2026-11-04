@@ -1,4 +1,4 @@
-"""Checks raw.ingestion_run's constraints and showdown-analyst's grants on it (see tests/pipelines/conftest.py)."""
+"""Checks raw.ingestion_run's constraints and showdown-analyst's grants on it (see tests/conftest.py)."""
 
 from datetime import date
 

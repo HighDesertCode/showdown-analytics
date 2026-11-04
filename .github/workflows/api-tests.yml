@@ -5,9 +5,10 @@ on:
     paths:
       - "api/**"
       - "tests/api/**"
-      # The API tests reuse the pipelines' database fixtures, which build the schemas and run the permission
-      # files, and create the api tables from the dbt models' contracts.
-      - "tests/pipelines/conftest.py"
+      # The shared database fixtures build the schemas and run the permission files; the API tests then create the
+      # api tables from the dbt models' contracts.
+      - "tests/conftest.py"
+      - "tests/database.py"
       - "sql/**"
       - "transform/models/api/**"
       - "pyproject.toml"

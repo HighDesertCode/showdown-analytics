@@ -1,4 +1,4 @@
-"""Runs pipelines.raw.battle against real tables built from sql/ (see tests/pipelines/conftest.py)."""
+"""Runs pipelines.raw.battle against real tables built from sql/ (see tests/conftest.py)."""
 
 from dataclasses import replace
 from datetime import UTC, datetime
