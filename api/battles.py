@@ -16,6 +16,7 @@ from api.params import (
     Offset,
     TeamType,
     format_month,
+    month_bounds,
     optional_id,
     parse_month,
     type_id,
@@ -144,8 +145,9 @@ def search(
     conditions: list[LiteralString] = ["battle.format = %s"]
     args: list[Any] = [format]
     if month is not None:
-        conditions.append("battle.report_month = %s")
-        args.append(parse_month(month))
+        # As a range of started_at, which the table's index serves; report_month is the UTC month started_at falls in.
+        conditions.append("battle.started_at >= %s AND battle.started_at < %s")
+        args.extend(month_bounds(parse_month(month)))
     if rated is not None:
         conditions.append("battle.rated = %s")
         args.append(rated)

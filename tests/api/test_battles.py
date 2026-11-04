@@ -2,11 +2,10 @@ from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
-SEPTEMBER = date(2026, 9, 1)
 START = datetime(2026, 9, 10, 18, 0, tzinfo=UTC)
 
 
-def add_battle(insert, number, sides, rated=True, month=SEPTEMBER, started_at=None):
+def add_battle(insert, number, sides, rated=True, started_at=None):
     """A battle and its two sides, each a (player, team_type, elo_band, result) tuple for p1 then p2."""
     replay_id = f"gen9monotype-{number}"
     started = started_at or START + timedelta(hours=number)
@@ -14,7 +13,7 @@ def add_battle(insert, number, sides, rated=True, month=SEPTEMBER, started_at=No
         "replay_battle",
         replay_id=replay_id,
         format="gen9monotype",
-        report_month=month,
+        report_month=date(started.year, started.month, 1),
         replay_url=f"https://replay.pokemonshowdown.com/{replay_id}",
         rated=rated,
         started_at=started,
@@ -89,11 +88,15 @@ def test_search_filters_by_rated_and_elo_band(client, battles):
     assert replay_ids(search(client, elo_band=1200)) == ["gen9monotype-2", "gen9monotype-1"]
 
 
-def test_search_filters_by_month(client, insert, battles):
+def test_search_filters_by_the_utc_month_a_battle_started_in(client, insert, battles):
     sides = [("Some Player", "water", 1400, "win"), ("Rival", "fire", 1200, "loss")]
-    add_battle(insert, 4, sides, month=date(2026, 8, 1))
+    add_battle(insert, 4, sides, started_at=datetime(2026, 8, 31, 23, 59, tzinfo=UTC))
+    add_battle(insert, 5, sides, started_at=datetime(2026, 9, 1, 0, 0, tzinfo=UTC))
+    add_battle(insert, 6, sides, started_at=datetime(2026, 12, 31, 23, 0, tzinfo=UTC))
 
     assert replay_ids(search(client, month="2026-08")) == ["gen9monotype-4"]
+    assert replay_ids(search(client, month="2026-12")) == ["gen9monotype-6"]
+    assert replay_ids(search(client, month="2027-01")) == []
 
 
 def test_search_pages(client, battles):

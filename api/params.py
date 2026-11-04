@@ -1,7 +1,7 @@
 """Query parameters the endpoints share, and how their values are read."""
 
 import re
-from datetime import date
+from datetime import UTC, date, datetime
 from enum import IntEnum
 from typing import Annotated
 
@@ -85,3 +85,10 @@ def parse_month(month: str) -> date:
 
 def format_month(month: date) -> str:
     return month.strftime("%Y-%m")
+
+
+def month_bounds(month: date) -> tuple[datetime, datetime]:
+    """The instants a month starts and ends at: midnight UTC on its first day, and on the next month's."""
+    start = datetime(month.year, month.month, 1, tzinfo=UTC)
+    end = datetime(month.year + month.month // 12, month.month % 12 + 1, 1, tzinfo=UTC)
+    return start, end
