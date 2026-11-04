@@ -1,0 +1,49 @@
+name: API Tests
+
+on:
+  pull_request:
+    paths:
+      - "api/**"
+      - "tests/api/**"
+      # The API tests reuse the pipelines' database fixtures, which build the schemas and run the permission
+      # files, and create the api tables from the dbt models' contracts.
+      - "tests/pipelines/conftest.py"
+      - "sql/**"
+      - "transform/models/api/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".python-version"
+      - ".github/workflows/api-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Repository Checkout
+        uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.2
+
+      - name: Install Dependencies
+        run: uv sync --locked --group api
+
+      - name: Run Tests
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: uv run --group api pytest tests/api

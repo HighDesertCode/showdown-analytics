@@ -71,6 +71,18 @@ class BattleScope(BaseModel):
     player: str | None = Field(None, description="Only battles this player played, by Showdown user ID.")
 
 
+class ReferenceScope(BaseModel):
+    """Reference data, which has no reporting period or sample."""
+
+    source: Literal["reference"] = Field(
+        "reference",
+        description=(
+            "Pokémon Showdown's own data files: species, types, abilities, items, moves, and natures as Showdown "
+            "currently defines them, including entries no longer legal (marked in nonstandard)."
+        ),
+    )
+
+
 class SourceFile(BaseModel):
     """A Smogon file the data was loaded from."""
 
@@ -87,7 +99,7 @@ class Page(BaseModel):
 
 
 class Envelope[T](BaseModel):
-    scope: SmogonScope | ReplayScope | BattleScope = Field(discriminator="source")
+    scope: SmogonScope | ReplayScope | BattleScope | ReferenceScope = Field(discriminator="source")
     sources: list[SourceFile] = Field(
         description="The Smogon files behind this data; empty for replay data, where each battle is its own source."
     )
