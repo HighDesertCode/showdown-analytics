@@ -348,13 +348,6 @@ def test_pokemon_section_rejects_an_unknown_section(client, insert):
     assert client.get("/v1/smogon/pokemon/swampert/natures").status_code == 422
 
 
-def test_openapi_schema_builds(client):
-    response = client.get("/openapi.json")
-
-    assert response.status_code == 200
-    assert "/v1/smogon/pokemon/{species}/{section}" in response.json()["paths"]
-
-
 def test_leads_ranks_pokemon_and_cites_the_leads_file(client, insert):
     add_report(insert)
     for rank, species in enumerate(["swampert", "greattusk"], start=1):

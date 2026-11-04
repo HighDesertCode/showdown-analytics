@@ -9,10 +9,10 @@ from pydantic import BaseModel, Field
 from api.db import Connection, paginate
 from api.params import (
     DEFAULT_FORMAT,
+    BattleMonth,
     EloBand,
     Format,
     Limit,
-    Month,
     Offset,
     TeamType,
     format_month,
@@ -21,7 +21,7 @@ from api.params import (
     parse_month,
     type_id,
 )
-from api.responses import BattleScope, Envelope
+from api.responses import NOT_FOUND, BattleScope, Envelope
 
 router = APIRouter(prefix="/v1/battles", tags=["Battles"])
 
@@ -51,9 +51,9 @@ class BattleBase(BaseModel):
     rated: bool = Field(
         description="Whether the battle counted for the ladder; challenges and tournaments are unrated."
     )
-    started_at: datetime
-    ended_at: datetime
-    turns: int
+    started_at: datetime = Field(description="When the battle started, in UTC.")
+    ended_at: datetime = Field(description="When it ended, in UTC.")
+    turns: int = Field(description="Turns played.")
     winner: str | None = Field(description="The winning side, p1 or p2; null for a tie.")
     ended_by: str = Field(description="knockout, forfeit, inactivity, or tie.")
 
@@ -66,7 +66,7 @@ class PreviewedPokemon(BaseModel):
     slot: int = Field(description="Its position in team preview, 1 to 6.")
     previewed_species: str = Field(description='The species as previewed; "Urshifu-*" hides which form it is.')
     species: str = Field(description="The matched species' Showdown ID; the base species for a hidden form.")
-    species_name: str
+    species_name: str = Field(description="The matched species' display name.")
     form_hidden: bool = Field(description="True when team preview hid the form, as with Urshifu-*.")
     nickname: str | None = Field(description="Null if it never switched in.")
 
@@ -89,13 +89,13 @@ class Event(BaseModel):
     side: str | None = Field(description="The side of the Pokémon acting or affected; null for field events.")
     pokemon: str | None = Field(description="The Pokémon as shown at team preview, e.g. Urshifu-*.")
     species: str | None = Field(description="The form it is in at this event, e.g. urshifurapidstrike.")
-    species_name: str | None
+    species_name: str | None = Field(description="That form's display name, e.g. Urshifu-Rapid-Strike.")
     event: str = Field(description="What happened, e.g. move, damage, switch, or side start.")
     detail: str | None = Field(description="The move, ability, condition, or species involved.")
-    target_side: str | None
-    target_pokemon: str | None
+    target_side: str | None = Field(description="The side of the Pokémon the event is aimed at; null when none is.")
+    target_pokemon: str | None = Field(description="The target as shown at team preview.")
     target_species: str | None = Field(description="The form the target is in at this event.")
-    target_species_name: str | None
+    target_species_name: str | None = Field(description="That form's display name.")
     damage_percent: int | None = Field(
         description="HP lost, as a percent of max HP; capped at the HP the target had left."
     )
@@ -128,7 +128,7 @@ EVENT_SOURCE: LiteralString = (
 def search(
     conn: Connection,
     format: Format = DEFAULT_FORMAT,
-    month: Month = None,
+    month: BattleMonth = None,
     rated: Annotated[bool | None, Query(description="Only rated (true) or unrated (false) battles.")] = None,
     team_type: TeamType = None,
     elo_band: EloBand = None,
@@ -187,7 +187,7 @@ def search(
     )
 
 
-@router.get("/{replay_id}")
+@router.get("/{replay_id}", responses=NOT_FOUND)
 def battle(conn: Connection, replay_id: ReplayId) -> Envelope[BattleDetail]:
     """One battle: its result, rules, and both players with the teams they showed at team preview."""
     row = find_battle(conn, replay_id, f"{BATTLE_COLUMNS}, rules, uploaded_at, format, report_month")
@@ -212,7 +212,7 @@ def battle(conn: Connection, replay_id: ReplayId) -> Envelope[BattleDetail]:
     return Envelope(scope=scope, sources=[], data=BattleDetail(**row, sides=sides))
 
 
-@router.get("/{replay_id}/events")
+@router.get("/{replay_id}/events", responses=NOT_FOUND)
 def events(
     conn: Connection,
     replay_id: ReplayId,

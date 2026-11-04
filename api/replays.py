@@ -25,7 +25,7 @@ from api.params import (
     parse_month,
     type_id,
 )
-from api.responses import Envelope, Page, ReplayScope
+from api.responses import NOT_FOUND, Envelope, Page, ReplayScope
 
 router = APIRouter(prefix="/v1/replays", tags=["Replay statistics"])
 
@@ -42,23 +42,23 @@ class BandSample(BaseModel):
 class ReplayTypeMatchup(BaseModel):
     elo_band: int = Field(description="The team's Elo band; the opponent can be in another.")
     type: str = Field(description="The team's inferred type, as a Showdown ID.")
-    type_name: str
+    type_name: str = Field(description="The team type's display name, e.g. Water.")
     opponent_type: str = Field(description="The opposing team's inferred type.")
-    opponent_type_name: str
-    is_mirror: bool
+    opponent_type_name: str = Field(description="The opposing team type's display name.")
+    is_mirror: bool = Field(description="True when a type faces itself.")
     battle_count: int = Field(description="Rated battles between the two types.")
-    win_count: int
-    tie_count: int
+    win_count: int = Field(description="Those battles this type won.")
+    tie_count: int = Field(description="Those battles that ended in a tie.")
     win_rate: float | None = Field(
         description="win_count ÷ battle_count, from 0 to 1, so ties count against it; null for mirror matches."
     )
 
 
 class ReplayLead(BaseModel):
-    elo_band: int
+    elo_band: int = Field(description="The team's Elo band.")
     team_type: str = Field(description="The team's inferred type, as a Showdown ID.")
     species: str = Field(description="The lead's species, in the form it entered as, e.g. urshifurapidstrike.")
-    species_name: str
+    species_name: str = Field(description="The species' display name, e.g. Urshifu-Rapid-Strike.")
     lead_count: int = Field(description="Teams of this type and band that led with this Pokémon.")
     team_count: int = Field(
         description="Teams of this type and band that sent out a lead, the denominator of lead_share. A battle "
@@ -72,9 +72,9 @@ class ReplayLead(BaseModel):
 class MoveDamage(BaseModel):
     elo_band: int = Field(description="The attacker's Elo band.")
     species: str = Field(description="The attacker, in the form it was in.")
-    species_name: str
+    species_name: str = Field(description="The attacker's display name.")
     move: str = Field(description="The move's Showdown ID.")
-    move_name: str
+    move_name: str = Field(description="The move's display name, e.g. Earthquake.")
     hit_count: int = Field(description="Hits that dealt damage; each hit of a multi-hit move counts.")
     mean_damage_percent: float = Field(
         description="Mean damage per hit, as a percent (0 to 100) of the target's max HP. A hit is capped at the HP "
@@ -94,7 +94,7 @@ class HazardDamage(BaseModel):
     knockout_count: int = Field(description="Hits that left the Pokémon with no HP.")
 
 
-@router.get("/sample")
+@router.get("/sample", responses=NOT_FOUND)
 def sample(
     conn: Connection, format: Format = DEFAULT_FORMAT, month: Month = None, elo_band: EloBand = None
 ) -> Envelope[list[BandSample]]:
@@ -113,7 +113,7 @@ def sample(
     return Envelope(scope=scope.echo, sources=[], data=[BandSample(**row) for row in rows])
 
 
-@router.get("/type-matchups")
+@router.get("/type-matchups", responses=NOT_FOUND)
 def type_matchups(
     conn: Connection,
     format: Format = DEFAULT_FORMAT,
@@ -145,7 +145,7 @@ def type_matchups(
     )
 
 
-@router.get("/leads")
+@router.get("/leads", responses=NOT_FOUND)
 def leads(
     conn: Connection,
     format: Format = DEFAULT_FORMAT,
@@ -176,7 +176,7 @@ def leads(
     )
 
 
-@router.get("/move-damage")
+@router.get("/move-damage", responses=NOT_FOUND)
 def move_damage(
     conn: Connection,
     format: Format = DEFAULT_FORMAT,
@@ -208,7 +208,7 @@ def move_damage(
     )
 
 
-@router.get("/hazard-damage")
+@router.get("/hazard-damage", responses=NOT_FOUND)
 def hazard_damage(
     conn: Connection,
     format: Format = DEFAULT_FORMAT,

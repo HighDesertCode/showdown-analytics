@@ -27,6 +27,13 @@ Month = Annotated[
     str | None,
     Query(pattern=MONTH_PATTERN, description="The reporting month, as YYYY-MM. Defaults to the latest month."),
 ]
+BattleMonth = Annotated[
+    str | None,
+    Query(
+        pattern=MONTH_PATTERN,
+        description="Only battles that started in this UTC month, as YYYY-MM. Leave out for every month.",
+    ),
+]
 Baseline = Annotated[
     int,
     Query(description="The rating baseline teams are weighted by. 1630 reflects good players, 1760 strong players."),

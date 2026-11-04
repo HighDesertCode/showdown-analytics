@@ -24,6 +24,33 @@ def test_health_reports_unavailable_when_the_database_is_unreachable():
     assert response.json() == {"detail": "Database unavailable"}
 
 
+def test_openapi_serves_every_endpoint(client):
+    response = client.get("/openapi.json")
+
+    assert response.status_code == 200
+    assert "/v1/smogon/pokemon/{species}/{section}" in response.json()["paths"]
+
+
+def test_openapi_describes_every_operation_parameter_and_field():
+    # Agents read these descriptions, so none may be left out.
+    spec = create_app().openapi()
+
+    undescribed = []
+    for path, operations in spec["paths"].items():
+        for method, operation in operations.items():
+            if not operation.get("description"):
+                undescribed.append(f"{method.upper()} {path}")
+            undescribed += [f"{path}?{p['name']}" for p in operation.get("parameters", []) if not p.get("description")]
+    for name, schema in spec["components"]["schemas"].items():
+        if name in ("HTTPValidationError", "ValidationError"):
+            continue
+        undescribed += [
+            f"{name}.{f}" for f, prop in schema.get("properties", {}).items() if not prop.get("description")
+        ]
+
+    assert undescribed == []
+
+
 @pytest.fixture
 def api_settings(monkeypatch):
     for name, value in {

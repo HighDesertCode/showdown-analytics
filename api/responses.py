@@ -1,7 +1,7 @@
 """The envelope every response shares: what the data covers, where it came from, and which page it is."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -86,7 +86,7 @@ class ReferenceScope(BaseModel):
 class SourceFile(BaseModel):
     """A Smogon file the data was loaded from."""
 
-    source_file_id: int
+    source_file_id: int = Field(description="The file's ID, for /v1/smogon/source-files/{source_file_id}.")
     family: str = Field(description="The report family: chaos, usage, leads, metagame, or matchup_chart.")
     url: str = Field(description="Where the file is published on smogon.com.")
     retrieved_at: datetime = Field(description="When the file was downloaded.")
@@ -99,9 +99,22 @@ class Page(BaseModel):
 
 
 class Envelope[T](BaseModel):
-    scope: SmogonScope | ReplayScope | BattleScope | ReferenceScope = Field(discriminator="source")
-    sources: list[SourceFile] = Field(
-        description="The Smogon files behind this data; empty for replay data, where each battle is its own source."
+    scope: SmogonScope | ReplayScope | BattleScope | ReferenceScope = Field(
+        discriminator="source",
+        description="What the data covers, with every default the API filled in; source says which kind of data it is.",
     )
-    data: T
+    sources: list[SourceFile] = Field(
+        description="The Smogon files behind this data; empty for replay and reference data."
+    )
+    data: T = Field(description="The statistics or entries themselves.")
     page: Page | None = Field(None, description="Set when the data is paginated.")
+
+
+class Error(BaseModel):
+    detail: str = Field(description="What went wrong; for a 404, what wasn't found.")
+
+
+# The 404 every lookup can answer, for the routes that declare it.
+NOT_FOUND: dict[int | str, dict[str, Any]] = {
+    404: {"model": Error, "description": "Nothing matches the request; detail says what wasn't found."}
+}

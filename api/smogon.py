@@ -24,7 +24,7 @@ from api.params import (
     showdown_id,
     type_id,
 )
-from api.responses import Envelope, Page, SmogonScope, SourceFile
+from api.responses import NOT_FOUND, Envelope, Page, SmogonScope, SourceFile
 
 router = APIRouter(prefix="/v1/smogon", tags=["Smogon statistics"])
 
@@ -73,20 +73,20 @@ class PokemonUsage(BaseModel):
 
 class AbilityShare(BaseModel):
     ability: str = Field(description="The ability's Showdown ID.")
-    ability_name: str
+    ability_name: str = Field(description="The ability's display name, e.g. Intimidate.")
     share: float = Field(description="Share of this Pokémon's sets with this ability; sums to 1 per Pokémon.")
 
 
 class ItemShare(BaseModel):
     has_item: bool = Field(description="False for sets holding no item.")
     item: str | None = Field(description="The item's Showdown ID; null for sets holding no item.")
-    item_name: str | None
+    item_name: str | None = Field(description="The item's display name; null for sets holding no item.")
     share: float = Field(description="Share of this Pokémon's sets holding this item; sums to 1 per Pokémon.")
 
 
 class MoveShare(BaseModel):
     move: str = Field(description="The move's Showdown ID.")
-    move_name: str
+    move_name: str = Field(description="The move's display name, e.g. Earthquake.")
     share: float = Field(
         description="Share of this Pokémon's sets with this move; sums to at most 4 per Pokémon (four move slots)."
     )
@@ -95,19 +95,19 @@ class MoveShare(BaseModel):
 class SpreadShare(BaseModel):
     spread: str = Field(description="Smogon's label, e.g. Timid:0/0/4/252/0/252.")
     nature: str = Field(description="The nature's Showdown ID.")
-    nature_name: str
-    hp_evs: int
-    atk_evs: int
-    def_evs: int
-    spa_evs: int
-    spd_evs: int
-    spe_evs: int
+    nature_name: str = Field(description="The nature's display name, e.g. Timid.")
+    hp_evs: int = Field(description="EVs invested in HP.")
+    atk_evs: int = Field(description="EVs invested in Attack.")
+    def_evs: int = Field(description="EVs invested in Defense.")
+    spa_evs: int = Field(description="EVs invested in Special Attack.")
+    spd_evs: int = Field(description="EVs invested in Special Defense.")
+    spe_evs: int = Field(description="EVs invested in Speed.")
     share: float = Field(description="Share of this Pokémon's sets with this nature and spread; sums to 1 per Pokémon.")
 
 
 class TeammateShare(BaseModel):
     species: str = Field(description="The teammate's Showdown ID.")
-    species_name: str
+    species_name: str = Field(description="The teammate's display name.")
     share: float = Field(
         description=(
             "Share of this Pokémon's teams that include this teammate; sums to just under 5 per Pokémon, since "
@@ -118,7 +118,7 @@ class TeammateShare(BaseModel):
 
 class Counter(BaseModel):
     species: str = Field(description="The opponent's Showdown ID.")
-    species_name: str
+    species_name: str = Field(description="The opponent's display name.")
     encounters: float = Field(
         description="Weighted encounters between the two Pokémon that ended with one of them KOed or switched out."
     )
@@ -139,7 +139,7 @@ class Lead(BaseModel):
 
 
 class PokemonProfile(BaseModel):
-    usage: PokemonUsage
+    usage: PokemonUsage = Field(description="The Pokémon's usage row in this scope.")
     lead: Lead | None = Field(description="How often this Pokémon leads; null when it never led in this scope.")
     abilities: list[AbilityShare] = Field(description="The most common abilities, up to 10.")
     items: list[ItemShare] = Field(description="The most common items, up to 10.")
@@ -154,7 +154,7 @@ class PokemonProfile(BaseModel):
 class PokemonLead(BaseModel):
     rank: int = Field(description="The Pokémon's lead rank in this scope, 1 for the most common lead.")
     species: str = Field(description="The species' Showdown ID.")
-    species_name: str
+    species_name: str = Field(description="The species' display name, e.g. Ninetales-Alola.")
     lead_share: float = Field(description="Share of leads, weighted by the baseline; sums to 1 per scope.")
     raw_count: int = Field(description="Times this Pokémon led, unweighted.")
     raw_lead_share: float = Field(description="Share of leads, unweighted; sums to 1 per scope.")
@@ -187,9 +187,9 @@ class Metagame(BaseModel):
 
 class TypeMatchup(BaseModel):
     type: str = Field(description="The team type's Showdown ID, e.g. water.")
-    type_name: str
+    type_name: str = Field(description="The team type's display name, e.g. Water.")
     opponent_type: str = Field(description="The opposing team type's Showdown ID.")
-    opponent_type_name: str
+    opponent_type_name: str = Field(description="The opposing team type's display name.")
     is_mirror: bool = Field(description="True when a type faces itself.")
     wins: float = Field(description="Weighted wins for this type in this pairing.")
     win_rate: float | None = Field(
@@ -201,12 +201,12 @@ class TypeMatchup(BaseModel):
 class TypeViability(BaseModel):
     rank: int = Field(description="1 for the highest viability score in the chart.")
     type: str = Field(description="The team type's Showdown ID.")
-    type_name: str
+    type_name: str = Field(description="The team type's display name, e.g. Water.")
     viability_score: float = Field(description="Smogon's published ViabilityScore; a score, not a win rate.")
 
 
 class SourceFileDetail(BaseModel):
-    source_file_id: int
+    source_file_id: int = Field(description="The file's ID.")
     family: str = Field(description="The report family: chaos, usage, leads, metagame, or matchup_chart.")
     url: str = Field(description="Where the file is published on smogon.com.")
     content_sha256: str = Field(
@@ -229,6 +229,11 @@ class Section(StrEnum):
     spreads = "spreads"
     teammates = "teammates"
     counters = "counters"
+
+
+SectionPath = Annotated[
+    Section, Path(description="The section: abilities, items, moves, spreads, teammates, or counters.")
+]
 
 
 @dataclass(frozen=True)
@@ -285,7 +290,7 @@ def months(conn: Connection, format: Format = DEFAULT_FORMAT) -> Envelope[list[A
     return Envelope(scope=SmogonScope(format=format), sources=[], data=data)
 
 
-@router.get("/usage")
+@router.get("/usage", responses=NOT_FOUND)
 def usage(
     conn: Connection,
     format: Format = DEFAULT_FORMAT,
@@ -308,7 +313,7 @@ def usage(
     )
 
 
-@router.get("/pokemon/{species}")
+@router.get("/pokemon/{species}", responses=NOT_FOUND)
 def pokemon(
     conn: Connection,
     species: Species,
@@ -348,11 +353,11 @@ def pokemon(
     )
 
 
-@router.get("/pokemon/{species}/{section}")
+@router.get("/pokemon/{species}/{section}", responses=NOT_FOUND)
 def pokemon_section(
     conn: Connection,
     species: Species,
-    section: Section,
+    section: SectionPath,
     format: Format = DEFAULT_FORMAT,
     month: Month = None,
     baseline: Baseline = DEFAULT_BASELINE,
@@ -378,7 +383,7 @@ def pokemon_section(
     )
 
 
-@router.get("/leads")
+@router.get("/leads", responses=NOT_FOUND)
 def leads(
     conn: Connection,
     format: Format = DEFAULT_FORMAT,
@@ -408,7 +413,7 @@ def leads(
     )
 
 
-@router.get("/metagame")
+@router.get("/metagame", responses=NOT_FOUND)
 def metagame(
     conn: Connection,
     format: Format = DEFAULT_FORMAT,
@@ -440,7 +445,7 @@ def metagame(
     )
 
 
-@router.get("/type-matchups")
+@router.get("/type-matchups", responses=NOT_FOUND)
 def type_matchups(
     conn: Connection,
     format: Format = DEFAULT_FORMAT,
@@ -480,7 +485,7 @@ def type_matchups(
     )
 
 
-@router.get("/type-viability")
+@router.get("/type-viability", responses=NOT_FOUND)
 def type_viability(
     conn: Connection, format: Format = DEFAULT_FORMAT, month: Month = None, baseline: Baseline = DEFAULT_BASELINE
 ) -> Envelope[list[TypeViability]]:
@@ -503,8 +508,10 @@ def type_viability(
     )
 
 
-@router.get("/source-files/{source_file_id}")
-def source_file(conn: Connection, source_file_id: int) -> Envelope[SourceFileDetail]:
+@router.get("/source-files/{source_file_id}", responses=NOT_FOUND)
+def source_file(
+    conn: Connection, source_file_id: Annotated[int, Path(description="The file's ID, from a response's sources.")]
+) -> Envelope[SourceFileDetail]:
     """One Smogon file the statistics were loaded from: its URL, when it was downloaded, and its SHA-256, which
     identifies the exact version used."""
     row = conn.execute(
