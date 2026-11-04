@@ -20,6 +20,9 @@ API_ROLE = "showdown-api"
 # showdown-api allows 10 connections. Four per instance leaves room for a deployment, when the old and new
 # instances run at once.
 MAX_CONNECTIONS = 4
+# Every pooled connection runs in autocommit mode, so a request's reads don't pay for BEGIN and COMMIT round trips
+# (under READ COMMITTED each statement sees its own snapshot either way), and returns rows as dicts.
+CONNECTION_KWARGS: dict[str, Any] = {"autocommit": True, "row_factory": dict_row}
 
 
 def create_pool() -> ConnectionPool:
@@ -32,13 +35,12 @@ def create_pool() -> ConnectionPool:
     if os.environ["PGHOST"] not in LOCAL_HOSTS and os.environ.get("PGSSLMODE") != "verify-full":
         raise RuntimeError("Refusing to connect without PGSSLMODE=verify-full to a database that isn't local.")
     # An empty conninfo, so libpq reads the PG* variables.
-    return ConnectionPool("", min_size=1, max_size=MAX_CONNECTIONS, open=False)
+    return ConnectionPool("", min_size=1, max_size=MAX_CONNECTIONS, kwargs=CONNECTION_KWARGS, open=False)
 
 
 def connection(request: Request) -> Iterator[psycopg.Connection[dict[str, Any]]]:
-    """A pooled connection for one request, returning rows as dicts, given back to the pool afterwards."""
+    """A pooled connection for one request, given back to the pool afterwards."""
     with request.app.state.pool.connection() as conn:
-        conn.row_factory = dict_row
         yield conn
 
 

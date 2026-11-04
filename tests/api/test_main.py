@@ -1,5 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
+from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
 from api.db import create_pool
@@ -38,6 +39,10 @@ def test_create_pool_accepts_the_api_role_with_verified_tls(api_settings):
     pool = create_pool()
 
     assert pool.max_size == 4
+
+
+def test_create_pool_runs_in_autocommit_mode_with_dict_rows(api_settings):
+    assert create_pool().kwargs == {"autocommit": True, "row_factory": dict_row}
 
 
 @pytest.mark.parametrize("user", ["showdown-analyst", "showdown-transform", "doadmin"])

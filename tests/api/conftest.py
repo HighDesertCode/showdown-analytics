@@ -19,6 +19,7 @@ from fastapi.testclient import TestClient
 from psycopg import sql
 from psycopg_pool import ConnectionPool
 
+from api.db import CONNECTION_KWARGS
 from api.main import create_app
 
 ROOT = Path(__file__).parents[2]
@@ -124,11 +125,12 @@ def insert(database_url: str, api_tables: list[str]) -> Iterator[Insert]:
 def _as_api_role(conn: psycopg.Connection) -> None:
     # The test server's roles can't log in, so connect as the superuser and switch to showdown-api.
     conn.execute('SET ROLE "showdown-api"')
-    conn.commit()
 
 
 @pytest.fixture
 def client(database_url: str, api_tables: list[str]) -> Iterator[TestClient]:
-    pool = ConnectionPool(database_url, min_size=1, max_size=1, configure=_as_api_role, open=False)
+    pool = ConnectionPool(
+        database_url, min_size=1, max_size=1, kwargs=CONNECTION_KWARGS, configure=_as_api_role, open=False
+    )
     with TestClient(create_app(pool)) as test_client:
         yield test_client
