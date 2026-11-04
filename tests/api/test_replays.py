@@ -176,15 +176,6 @@ def test_leads_list_every_type_when_the_filter_is_left_out_or_overall(client, in
     assert [row["team_type"] for row in body["data"]] == ["fire", "water"]
 
 
-def test_leads_reject_a_type_with_no_letters_or_digits(client, insert):
-    add_sample(insert)
-
-    response = client.get("/v1/replays/leads", params={"team_type": "!"})
-
-    assert response.status_code == 422
-    assert response.json() == {"detail": "'!' isn't a type"}
-
-
 def test_move_damage_filters_by_attacker_and_move_by_name(client, insert):
     add_sample(insert)
     species_ids = {"swampert": 1, "garchomp": 2}

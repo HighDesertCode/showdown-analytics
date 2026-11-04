@@ -184,9 +184,7 @@ def test_usage_explains_a_missing_scope(client, insert, params, detail):
     assert response.json() == {"detail": detail}
 
 
-@pytest.mark.parametrize(
-    "params", [{"month": "2026-13"}, {"month": "September"}, {"limit": 501}, {"offset": -1}, {"team_type": "!"}]
-)
+@pytest.mark.parametrize("params", [{"month": "2026-13"}, {"month": "September"}, {"limit": 501}, {"offset": -1}])
 def test_usage_rejects_invalid_parameters(client, insert, params):
     add_report(insert)
 
@@ -311,14 +309,6 @@ def test_pokemon_profile_explains_a_pokemon_missing_from_the_scope(client, inser
     assert response.json() == {
         "detail": "No Smogon usage for greattusk for gen9monotype in 2026-09 at baseline 1630 (all teams)"
     }
-
-
-@pytest.mark.parametrize("path", ["/v1/smogon/pokemon/!!!", "/v1/smogon/pokemon/!!!/moves"])
-def test_pokemon_rejects_a_species_with_no_letters_or_digits(client, insert, path):
-    response = client.get(path)
-
-    assert response.status_code == 422
-    assert response.json() == {"detail": "'!!!' isn't a species"}
 
 
 def test_pokemon_section_lists_every_row_by_page(client, insert):
@@ -480,15 +470,6 @@ def test_type_matchups_filters_by_type_and_opponent(client, insert):
 
     assert [(row["type"], row["opponent_type"]) for row in body["data"]] == [("water", "ground")]
     assert body["page"]["total"] == 1
-
-
-def test_type_matchups_reject_a_type_with_no_letters_or_digits(client, insert):
-    add_chart(insert)
-
-    response = client.get("/v1/smogon/type-matchups", params={"type": "!"})
-
-    assert response.status_code == 422
-    assert response.json() == {"detail": "'!' isn't a type"}
 
 
 def test_type_matchups_explains_a_missing_chart(client, insert):

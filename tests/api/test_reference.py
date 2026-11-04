@@ -64,12 +64,5 @@ def test_entry_explains_a_missing_entry(client, insert):
     assert response.json() == {"detail": "No natures entry 'bold'"}
 
 
-def test_entry_rejects_a_name_with_no_letters_or_digits(client, insert):
-    response = client.get("/v1/reference/types/!!")
-
-    assert response.status_code == 422
-    assert response.json() == {"detail": "'!!' isn't a type"}
-
-
 def test_unknown_kind_is_rejected(client, insert):
     assert client.get("/v1/reference/berries").status_code == 422

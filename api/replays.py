@@ -125,6 +125,7 @@ def type_matchups(
     offset: Offset = 0,
 ) -> Envelope[ReplayScope, list[ReplayTypeMatchup]]:
     """Rated battles, wins, and win rate for each team type against each other type, by the team's Elo band."""
+    team, opponent = type_id(type), type_id(opponent_type)
     scope = resolve_scope(conn, format, month, elo_band)
     rows, page = page_rows(
         conn,
@@ -132,7 +133,7 @@ def type_matchups(
         "replay_type_matchup",
         "elo_band, type, type_name, opponent_type, opponent_type_name, is_mirror, battle_count, win_count, tie_count, "
         "win_rate",
-        [("type = %s", type_id(type)), ("opponent_type = %s", type_id(opponent_type))],
+        [("type = %s", team), ("opponent_type = %s", opponent)],
         "elo_band, type, opponent_type",
         limit,
         offset,
@@ -157,13 +158,14 @@ def leads(
 ) -> Envelope[ReplayScope, list[ReplayLead]]:
     """How often each Pokémon leads a team of its type, and how often those teams win, by Elo band. Most common
     leads first within each type and band."""
+    team = type_id(team_type)
     scope = resolve_scope(conn, format, month, elo_band)
     rows, page = page_rows(
         conn,
         scope,
         "replay_lead",
         "elo_band, team_type, species, species_name, lead_count, team_count, lead_share, win_count, win_rate",
-        [("team_type = %s", type_id(team_type))],
+        [("team_type = %s", team)],
         "elo_band, team_type, lead_share DESC, species",
         limit,
         offset,
@@ -189,13 +191,14 @@ def move_damage(
 ) -> Envelope[ReplayScope, list[MoveDamage]]:
     """Direct hits from each Pokémon's moves on the opposing Pokémon, by the attacker's Elo band: hits, mean damage,
     and knockouts. Most hits first."""
+    attacker, attack = optional_id(species, "species"), optional_id(move, "move")
     scope = resolve_scope(conn, format, month, elo_band)
     rows, page = page_rows(
         conn,
         scope,
         "replay_move_damage",
         "elo_band, species, species_name, move, move_name, hit_count, mean_damage_percent, knockout_count",
-        [("species = %s", optional_id(species, "species")), ("move = %s", optional_id(move, "move"))],
+        [("species = %s", attacker), ("move = %s", attack)],
         "elo_band, hit_count DESC, species, move",
         limit,
         offset,
@@ -219,13 +222,14 @@ def hazard_damage(
     offset: Offset = 0,
 ) -> Envelope[ReplayScope, list[HazardDamage]]:
     """Damage from Stealth Rock and Spikes by the Elo band and inferred type of the team taking it."""
+    team = type_id(team_type)
     scope = resolve_scope(conn, format, month, elo_band)
     rows, page = page_rows(
         conn,
         scope,
         "replay_hazard_damage",
         "elo_band, team_type, hazard, hit_count, mean_damage_percent, knockout_count",
-        [("team_type = %s", type_id(team_type))],
+        [("team_type = %s", team)],
         "elo_band, team_type, hazard",
         limit,
         offset,

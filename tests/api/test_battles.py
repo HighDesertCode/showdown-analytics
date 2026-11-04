@@ -120,13 +120,6 @@ def test_search_with_no_matches_has_an_empty_page(client, battles):
     assert body["page"] == {"limit": 50, "offset": 0, "total": 0}
 
 
-def test_search_rejects_a_player_with_no_letters_or_digits(client, battles):
-    response = client.get("/v1/battles", params={"player": "!!"})
-
-    assert response.status_code == 422
-    assert response.json() == {"detail": "'!!' isn't a player name"}
-
-
 def test_battle_has_its_rules_and_both_previewed_teams(client, insert, battles):
     insert("species", species_id=1, species="urshifu", species_name="Urshifu")
     insert("species", species_id=2, species="pelipper", species_name="Pelipper")

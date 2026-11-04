@@ -458,13 +458,14 @@ def type_matchups(
 ) -> Envelope[SmogonScope, list[TypeMatchup]]:
     """Weighted wins and win rate for each team type against each other type, from Smogon's matchup chart, which
     covers all teams. Filter by type, opponent type, or both."""
+    team, opponent = type_id(type), type_id(opponent_type)
     chart = resolve_chart(conn, format, month, baseline)
     conditions: list[LiteralString] = ["source_file_id = %s"]
     args: list[Any] = [chart.source_file_id]
-    if (team := type_id(type)) is not None:
+    if team is not None:
         conditions.append("type = %s")
         args.append(team)
-    if (opponent := type_id(opponent_type)) is not None:
+    if opponent is not None:
         conditions.append("opponent_type = %s")
         args.append(opponent)
     rows, page = paginate(
@@ -576,8 +577,8 @@ class Scope:
 
 def resolve_scope(conn: Connection, format: str, month: str | None, baseline: int, team_type: str | None) -> Scope:
     """Fills in the default month and reads the scope's report row; a 404 when Smogon published no report for it."""
-    report_month = resolve_month(conn, format, month, baseline)
     team = type_id(team_type)
+    report_month = resolve_month(conn, format, month, baseline)
     report = conn.execute(
         f"""
         SELECT battle_count, avg_team_weight, stalliness_mean, usage_source_file_id, chaos_source_file_id,

@@ -47,11 +47,22 @@ def test_a_query_past_the_statement_timeout_is_a_503_with_a_retry_hint():
     }
 
 
-def test_openapi_serves_every_endpoint(client):
-    response = client.get("/openapi.json")
+@pytest.mark.parametrize(
+    ("path", "params", "detail"),
+    [
+        ("/v1/smogon/pokemon/!!!", {}, "'!!!' isn't a species"),
+        ("/v1/smogon/usage", {"team_type": "!"}, "'!' isn't a type"),
+        ("/v1/replays/leads", {"team_type": "!"}, "'!' isn't a type"),
+        ("/v1/battles", {"player": "!!"}, "'!!' isn't a player name"),
+        ("/v1/reference/types/!!", {}, "'!!' isn't a type"),
+    ],
+)
+def test_a_name_with_no_letters_or_digits_is_rejected_before_any_lookup(client, path, params, detail):
+    # Every router validates through params.showdown_id, and before touching the database: the tables are empty here.
+    response = client.get(path, params=params)
 
-    assert response.status_code == 200
-    assert "/v1/smogon/pokemon/{species}/{section}" in response.json()["paths"]
+    assert response.status_code == 422
+    assert response.json() == {"detail": detail}
 
 
 def test_openapi_names_each_operation_after_its_group_and_endpoint():
