@@ -1,0 +1,104 @@
+name: API Docker
+
+# Builds and scans the API image; it never pushes it. Releases push images from their own workflow.
+on:
+  pull_request:
+    paths:
+      - "api/**"
+      - "pipelines/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".python-version"
+      - "README.md"
+      - ".github/workflows/api-docker.yml"
+  # Keeps the default branch's code scanning alerts current, so fixed vulnerabilities close.
+  push:
+    branches: [main]
+    paths:
+      - "api/**"
+      - "pipelines/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".python-version"
+      - "README.md"
+      - ".github/workflows/api-docker.yml"
+  # New vulnerabilities are published against unchanged packages, so scan weekly too.
+  schedule:
+    - cron: "0 13 * * 1"
+
+permissions:
+  contents: read
+
+# Anchore's major tags lag behind their releases, so their actions are pinned to exact versions.
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repository Checkout
+        uses: actions/checkout@v7
+
+      # BuildKit reads api/Dockerfile.dockerignore, not the root .dockerignore, for this Dockerfile.
+      - name: Build Image
+        run: docker build -f api/Dockerfile -t showdown-api .
+
+      # The app loads its routes and reads its version without a database; startup needs one, so it isn't started.
+      - name: Check App
+        run: docker run --rm showdown-api python -c "from api.main import app; print(app.title, app.version)"
+
+      - name: Save Image
+        run: docker save -o showdown-api.tar showdown-api
+
+      - name: Upload Image
+        uses: actions/upload-artifact@v7
+        with:
+          name: api-image
+          path: showdown-api.tar
+          retention-days: 1
+
+  # Syft lists the image's packages, Grype checks them for fixable vulnerabilities, and the results go to code
+  # scanning without failing the build; High and Critical show as errors.
+  scan:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      # upload-sarif looks up the commit being scanned in the checkout.
+      - name: Repository Checkout
+        uses: actions/checkout@v7
+
+      - name: Download Image
+        uses: actions/download-artifact@v8
+        with:
+          name: api-image
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0.24.3
+        with:
+          image: docker-archive:showdown-api.tar
+          format: syft-json
+          output-file: sbom.syft.json
+          upload-artifact: false
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v7
+        with:
+          name: api-sbom
+          path: sbom.syft.json
+
+      - name: Scan SBOM
+        uses: anchore/scan-action@v7.4.2
+        with:
+          sbom: sbom.syft.json
+          only-fixed: true
+          severity-cutoff: high
+          fail-build: false
+          output-format: sarif
+          output-file: results.sarif
+
+      - name: Upload to Code Scanning
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: results.sarif
+          category: api-image
