@@ -47,7 +47,7 @@ SELECT
     species.showdown_id AS species,
     species.name AS species_name,
     lead_count.lead_count,
-    SUM(lead_count.lead_count) OVER scope AS team_count,
+    (SUM(lead_count.lead_count) OVER scope)::BIGINT AS team_count,
     TRIM_SCALE(ROUND(lead_count.lead_count / SUM(lead_count.lead_count) OVER scope, 10)) AS lead_share,
     lead_count.win_count,
     TRIM_SCALE(ROUND(lead_count.win_count::NUMERIC / lead_count.lead_count, 10)) AS win_rate

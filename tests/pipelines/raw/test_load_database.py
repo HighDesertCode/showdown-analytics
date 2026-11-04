@@ -1,4 +1,4 @@
-"""Runs the raw loaders against real tables built from sql/ (see tests/pipelines/conftest.py)."""
+"""Runs the raw loaders against real tables built from sql/ (see tests/conftest.py)."""
 
 import copy
 import json

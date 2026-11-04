@@ -6,7 +6,7 @@ on:
       - "transform/**"
       - "sql/**"
       - "tests/transform/**"
-      - "tests/pipelines/conftest.py"
+      - "tests/database.py"
       - "pyproject.toml"
       - "uv.lock"
       - ".python-version"

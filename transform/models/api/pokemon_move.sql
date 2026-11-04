@@ -1,3 +1,5 @@
+{{ config(indexes=[{'columns': ['format', 'report_month', 'baseline', 'team_type', 'species']}]) }}
+-- The index serves the API, which reads one Pokémon in one scope.
 -- Share of each Pokémon's sets with each move, per report scope. Shares sum to at most 4 per Pokémon (four move slots).
 -- Unused move slots are left out: Smogon counts each one, so a one-move set adds 3 and the value isn't a share.
 SELECT

@@ -1,0 +1,30 @@
+name: API Type Checker
+
+on:
+  pull_request:
+    paths:
+      - "api/**"
+      - "tests/api/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".python-version"
+      - ".github/workflows/api-type-checker.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  type-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repository Checkout
+        uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.2
+
+      - name: Install Dependencies
+        run: uv sync --locked --group api
+
+      - name: Type Check
+        run: uv run --group api ty check api tests/api

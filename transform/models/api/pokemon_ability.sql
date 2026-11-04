@@ -1,3 +1,5 @@
+{{ config(indexes=[{'columns': ['format', 'report_month', 'baseline', 'team_type', 'species']}]) }}
+-- The index serves the API, which reads one Pokémon in one scope.
 -- Share of each Pokémon's sets with each ability, per report scope. Shares sum to 1 per Pokémon.
 -- Every chaos share uses the same denominator, the Pokémon's total ability weight, which matches Smogon's
 -- moveset reports (e.g. overall 1630 Swampert: Earthquake 98.902%, Toxapex as a teammate 54.322%).

@@ -1,8 +1,11 @@
+{{ config(indexes=[{'columns': ['format', 'report_month', 'baseline', 'team_type', 'species']}]) }}
+-- The index serves the API, which reads one Pokémon in one scope.
 -- One row per Pokémon in each report scope: usage from the usage report, plus the viability ceiling from chaos.
 -- Smogon's percentages become 0-to-1 proportions:
 --   usage_share: weighted share of teams with this Pokémon (usage % / 100)
 --   raw_share:   unweighted share of teams with this Pokémon (raw % / 100)
 --   real_share:  share of all Pokémon brought into battle (real % / 600, since Smogon scales real % to sum to 600)
+-- battle_appearance_rate is real_count / raw_count: how often a team with this Pokémon brought it into battle.
 -- Chaos omits Pokémon with negligible weight, so their viability columns are null. When no rated player used a
 -- Pokémon, chaos prints its GXE values as 0 placeholders, which become null too.
 SELECT
@@ -19,6 +22,7 @@ SELECT
     TRIM_SCALE(usage.raw_percent / 100) AS raw_share,
     usage.real_count,
     TRIM_SCALE(ROUND(usage.real_percent / 600, 10)) AS real_share,
+    TRIM_SCALE(ROUND(usage.real_count::NUMERIC / NULLIF(usage.raw_count, 0), 10)) AS battle_appearance_rate,
     chaos.viability_user_count,
     CASE WHEN chaos.viability_user_count > 0 THEN chaos.viability_top_gxe END AS viability_top_gxe,
     CASE WHEN chaos.viability_user_count > 0 THEN chaos.viability_gxe_p99 END AS viability_gxe_p99,

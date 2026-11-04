@@ -1,3 +1,5 @@
+{{ config(indexes=[{'columns': ['format', 'report_month', 'baseline', 'team_type', 'species']}]) }}
+-- The index serves the API, which reads one Pokémon in one scope.
 -- Checks and counters per Pokémon, from overall chaos reports only (per-type reports don't include them).
 -- Rates are 0-to-1 proportions; Smogon's moveset reports show them as percentages,
 -- e.g. overall 1630 Dragapult: Excadrill 55.049 (70.70±3.91).

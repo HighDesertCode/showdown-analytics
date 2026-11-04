@@ -104,6 +104,12 @@ models:
         description: Share of all Pokémon brought into battle in this scope; Smogon's Real % divided by 600, not 100.
         data_type: numeric
         constraints: [{type: not_null}, {type: check, expression: "real_share BETWEEN 0 AND 1"}]
+      - name: battle_appearance_rate
+        description: >
+          real_count / raw_count: how often a team with this Pokémon brought it into battle, unweighted. Null when
+          no team had it.
+        data_type: numeric
+        constraints: [{type: check, expression: "battle_appearance_rate BETWEEN 0 AND 1"}]
       - name: viability_user_count
         description: >
           Players using this Pokémon in chaos's viability ceiling; null when chaos omits it, as both baselines do for

@@ -1,6 +1,21 @@
 # Unit tests: fixed input rows and the exact rows each model should return. They need no loaded data,
 # so CI runs them against empty tables. Only the columns a test depends on are listed.
 unit_tests:
+  - name: replay_battle_side_derives_player_ids
+    description: >
+      A player's ID is their name in lowercase letters and digits, as Showdown's user IDs are, so spaces,
+      punctuation, and accented letters are dropped.
+    model: replay_battle_side
+    given:
+      - input: ref('stg_battle_side')
+        rows:
+          - {replay_id: a, side: p1, player: Some Player}
+          - {replay_id: a, side: p2, player: "Ünï_Cödé 99"}
+    expect:
+      rows:
+        - {replay_id: a, side: p1, player_id: someplayer}
+        - {replay_id: a, side: p2, player_id: ncd99}
+
   - name: replay_battle_event_adds_battles_whose_parse_is_new
     description: >
       An incremental build takes each battle whose current parse isn't in the table: a re-parsed battle (b), and a new

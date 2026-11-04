@@ -1,3 +1,5 @@
+{{ config(indexes=[{'columns': ['format', 'report_month', 'baseline', 'team_type', 'species']}]) }}
+-- The index serves the API, which reads one Pokémon in one scope.
 -- Share of each Pokémon's sets holding each item, per report scope. Shares sum to 1 per Pokémon.
 -- Sets with no held item are one row with has_item = false and null item columns.
 SELECT

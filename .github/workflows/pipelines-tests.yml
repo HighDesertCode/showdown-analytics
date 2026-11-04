@@ -5,6 +5,8 @@ on:
     paths:
       - "pipelines/**"
       - "tests/pipelines/**"
+      - "tests/conftest.py"
+      - "tests/database.py"
       - "sql/**"
       - "pyproject.toml"
       - "uv.lock"

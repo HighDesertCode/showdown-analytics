@@ -5,6 +5,8 @@ on:
     paths:
       - "pipelines/**"
       - "tests/pipelines/**"
+      - "tests/conftest.py"
+      - "tests/database.py"
       - "pyproject.toml"
       - "uv.lock"
       - ".python-version"
@@ -27,4 +29,4 @@ jobs:
         run: uv sync --locked
 
       - name: Type Check
-        run: uv run ty check pipelines tests/pipelines
+        run: uv run ty check pipelines tests/pipelines tests/conftest.py tests/database.py
