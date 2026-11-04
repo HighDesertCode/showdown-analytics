@@ -110,6 +110,13 @@ def test_search_treats_overall_as_every_team_type(client, battles):
     assert len(body["data"]) == 3
 
 
+def test_search_with_no_matches_has_an_empty_page(client, battles):
+    body = search(client, player="nobody")
+
+    assert body["data"] == []
+    assert body["page"] == {"limit": 50, "offset": 0, "total": 0}
+
+
 def test_search_rejects_a_player_with_no_letters_or_digits(client, battles):
     response = client.get("/v1/battles", params={"player": "!!"})
 
@@ -219,6 +226,7 @@ def test_events_filter_by_turn_and_page(client, insert, battles):
     paged = client.get("/v1/battles/gen9monotype-1/events", params={"limit": 2, "offset": 2}).json()
 
     assert [event["seq"] for event in by_turn["data"]] == [2, 3]
+    assert by_turn["page"]["total"] == 2
     assert [event["seq"] for event in paged["data"]] == [3, 4]
     assert paged["page"]["total"] == 4
 

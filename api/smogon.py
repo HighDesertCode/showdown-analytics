@@ -8,7 +8,7 @@ from typing import Annotated, Any, LiteralString
 from fastapi import APIRouter, HTTPException, Path
 from pydantic import BaseModel, Field
 
-from api.db import Connection
+from api.db import Connection, paginate
 from api.params import (
     DEFAULT_BASELINE,
     DEFAULT_FORMAT,
@@ -297,22 +297,14 @@ def usage(
 ) -> Envelope[list[PokemonUsage]]:
     """Pokémon ranked by usage in one scope: a month, baseline, and either all teams or teams of one type."""
     scope = resolve_scope(conn, format, month, baseline, team_type)
-    total = count(conn, "pokemon_usage", scope)
-    rows = conn.execute(
-        f"""
-        SELECT {USAGE_COLUMNS}
-        FROM api.pokemon_usage
-        WHERE {scope.filter}
-        ORDER BY rank, species
-        LIMIT %s OFFSET %s
-        """,
-        (*scope.args, limit, offset),
-    ).fetchall()
+    rows, page = paginate(
+        conn, USAGE_COLUMNS, "api.pokemon_usage", scope.filter, "rank, species", scope.args, limit, offset
+    )
     return Envelope(
         scope=scope.echo,
         sources=source_files(conn, [scope.report["usage_source_file_id"], scope.report["chaos_source_file_id"]]),
         data=[PokemonUsage(**row) for row in rows],
-        page=Page(limit=limit, offset=offset, total=total),
+        page=page,
     )
 
 
@@ -344,7 +336,7 @@ def pokemon(
         (*scope.args, species_id),
     ).fetchone()
     sections = {
-        section.value: section_rows(conn, section, scope, species_id, PROFILE_SECTION_ROWS, 0) for section in Section
+        section.value: section_page(conn, section, scope, species_id, PROFILE_SECTION_ROWS, 0)[0] for section in Section
     }
     report = scope.report
     return Envelope(
@@ -377,13 +369,12 @@ def pokemon_section(
     ).fetchone()
     if exists is None:
         raise HTTPException(status_code=404, detail=f"No Smogon usage for {species_id} {scope.describe()}")
-    query = SECTIONS[section]
-    total = count(conn, query.table, scope, species_id)
+    rows, page = section_page(conn, section, scope, species_id, limit, offset)
     return Envelope(
         scope=scope.echo,
         sources=source_files(conn, [scope.report["chaos_source_file_id"]]),
-        data=section_rows(conn, section, scope, species_id, limit, offset),
-        page=Page(limit=limit, offset=offset, total=total),
+        data=rows,
+        page=page,
     )
 
 
@@ -399,22 +390,21 @@ def leads(
 ) -> Envelope[list[PokemonLead]]:
     """Pokémon ranked by how often they are sent out first, in one scope."""
     scope = resolve_scope(conn, format, month, baseline, team_type)
-    total = count(conn, "pokemon_lead", scope)
-    rows = conn.execute(
-        f"""
-        SELECT rank, species, species_name, lead_share, raw_count, raw_lead_share
-        FROM api.pokemon_lead
-        WHERE {scope.filter}
-        ORDER BY rank, species
-        LIMIT %s OFFSET %s
-        """,
-        (*scope.args, limit, offset),
-    ).fetchall()
+    rows, page = paginate(
+        conn,
+        "rank, species, species_name, lead_share, raw_count, raw_lead_share",
+        "api.pokemon_lead",
+        scope.filter,
+        "rank, species",
+        scope.args,
+        limit,
+        offset,
+    )
     return Envelope(
         scope=scope.echo,
         sources=source_files(conn, [scope.report["leads_source_file_id"]]),
         data=[PokemonLead(**row) for row in rows],
-        page=Page(limit=limit, offset=offset, total=total),
+        page=page,
     )
 
 
@@ -472,23 +462,21 @@ def type_matchups(
     if (opponent := type_id(opponent_type)) is not None:
         conditions.append("opponent_type = %s")
         args.append(opponent)
-    where = " AND ".join(conditions)
-    total = conn.execute(f"SELECT COUNT(*) AS total FROM api.type_matchup WHERE {where}", args).fetchone()
-    rows = conn.execute(
-        f"""
-        SELECT type, type_name, opponent_type, opponent_type_name, is_mirror, wins, win_rate
-        FROM api.type_matchup
-        WHERE {where}
-        ORDER BY type, opponent_type
-        LIMIT %s OFFSET %s
-        """,
-        (*args, limit, offset),
-    ).fetchall()
+    rows, page = paginate(
+        conn,
+        "type, type_name, opponent_type, opponent_type_name, is_mirror, wins, win_rate",
+        "api.type_matchup",
+        " AND ".join(conditions),
+        "type, opponent_type",
+        args,
+        limit,
+        offset,
+    )
     return Envelope(
         scope=chart.echo,
         sources=source_files(conn, [chart.source_file_id]),
         data=[TypeMatchup(**row) for row in rows],
-        page=Page(limit=limit, offset=offset, total=total["total"] if total else 0),
+        page=page,
     )
 
 
@@ -619,29 +607,22 @@ def resolve_month(conn: Connection, format: str, month: str | None, baseline: in
     return row["latest"]
 
 
-def count(conn: Connection, table: LiteralString, scope: Scope, species: str | None = None) -> int:
-    """Rows in one scope of an api table, for one Pokémon if given."""
-    species_filter: LiteralString = " AND species = %s" if species is not None else ""
-    args = (*scope.args, species) if species is not None else scope.args
-    row = conn.execute(
-        f"SELECT COUNT(*) AS total FROM api.{table} WHERE {scope.filter}{species_filter}", args
-    ).fetchone()
-    return row["total"] if row else 0
-
-
-def section_rows(conn: Connection, section: Section, scope: Scope, species: str, limit: int, offset: int) -> list[Any]:
+def section_page(
+    conn: Connection, section: Section, scope: Scope, species: str, limit: int, offset: int
+) -> tuple[list[Any], Page]:
+    """One page of a Pokémon's section in one scope, as the section's models."""
     query = SECTIONS[section]
-    rows = conn.execute(
-        f"""
-        SELECT {query.columns}
-        FROM api.{query.table}
-        WHERE {scope.filter} AND species = %s
-        ORDER BY {query.order}
-        LIMIT %s OFFSET %s
-        """,
-        (*scope.args, species, limit, offset),
-    ).fetchall()
-    return [query.model(**row) for row in rows]
+    rows, page = paginate(
+        conn,
+        query.columns,
+        f"api.{query.table}",
+        f"{scope.filter} AND species = %s",
+        query.order,
+        (*scope.args, species),
+        limit,
+        offset,
+    )
+    return [query.model(**row) for row in rows], page
 
 
 @dataclass(frozen=True)

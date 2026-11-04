@@ -156,6 +156,17 @@ def test_usage_pages(client, insert):
     assert body["page"] == {"limit": 1, "offset": 1, "total": 3}
 
 
+def test_usage_page_past_the_end_keeps_the_total(client, insert):
+    add_report(insert)
+    for rank, species in enumerate(["swampert", "greattusk", "corviknight"], start=1):
+        add_usage(insert, rank, species, species.title())
+
+    body = client.get("/v1/smogon/usage", params={"limit": 1, "offset": 5}).json()
+
+    assert body["data"] == []
+    assert body["page"] == {"limit": 1, "offset": 5, "total": 3}
+
+
 @pytest.mark.parametrize(
     ("params", "detail"),
     [
@@ -277,6 +288,18 @@ def test_pokemon_profile_accepts_a_display_name_and_has_no_lead_when_it_never_le
 
     assert body["data"]["usage"]["species"] == "swampert"
     assert body["data"]["lead"] is None
+
+
+def test_pokemon_profile_has_no_counters_for_one_team_type(client, insert):
+    add_report(insert, team_type="water")
+    add_usage(insert, 1, "swampert", "Swampert", team_type="water")
+
+    profile = client.get("/v1/smogon/pokemon/swampert", params={"team_type": "water"}).json()["data"]
+    section = client.get("/v1/smogon/pokemon/swampert/counters", params={"team_type": "water"}).json()
+
+    assert profile["counters"] == []
+    assert section["data"] == []
+    assert section["page"]["total"] == 0
 
 
 def test_pokemon_profile_explains_a_pokemon_missing_from_the_scope(client, insert):

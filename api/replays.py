@@ -10,7 +10,7 @@ from typing import Annotated, Any, LiteralString
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from api.db import Connection
+from api.db import Connection, paginate
 from api.params import (
     DEFAULT_FORMAT,
     EloBand,
@@ -126,7 +126,7 @@ def type_matchups(
 ) -> Envelope[list[ReplayTypeMatchup]]:
     """Rated battles, wins, and win rate for each team type against each other type, by the team's Elo band."""
     scope = resolve_scope(conn, format, month, elo_band)
-    rows, total = page_rows(
+    rows, page = page_rows(
         conn,
         scope,
         "replay_type_matchup",
@@ -141,7 +141,7 @@ def type_matchups(
         scope=scope.echo,
         sources=[],
         data=[ReplayTypeMatchup(**row) for row in rows],
-        page=Page(limit=limit, offset=offset, total=total),
+        page=page,
     )
 
 
@@ -158,7 +158,7 @@ def leads(
     """How often each Pokémon leads a team of its type, and how often those teams win, by Elo band. Most common
     leads first within each type and band."""
     scope = resolve_scope(conn, format, month, elo_band)
-    rows, total = page_rows(
+    rows, page = page_rows(
         conn,
         scope,
         "replay_lead",
@@ -172,7 +172,7 @@ def leads(
         scope=scope.echo,
         sources=[],
         data=[ReplayLead(**row) for row in rows],
-        page=Page(limit=limit, offset=offset, total=total),
+        page=page,
     )
 
 
@@ -190,7 +190,7 @@ def move_damage(
     """Direct hits from each Pokémon's moves on the opposing Pokémon, by the attacker's Elo band: hits, mean damage,
     and knockouts. Most hits first."""
     scope = resolve_scope(conn, format, month, elo_band)
-    rows, total = page_rows(
+    rows, page = page_rows(
         conn,
         scope,
         "replay_move_damage",
@@ -204,7 +204,7 @@ def move_damage(
         scope=scope.echo,
         sources=[],
         data=[MoveDamage(**row) for row in rows],
-        page=Page(limit=limit, offset=offset, total=total),
+        page=page,
     )
 
 
@@ -220,7 +220,7 @@ def hazard_damage(
 ) -> Envelope[list[HazardDamage]]:
     """Damage from Stealth Rock and Spikes by the Elo band and inferred type of the team taking it."""
     scope = resolve_scope(conn, format, month, elo_band)
-    rows, total = page_rows(
+    rows, page = page_rows(
         conn,
         scope,
         "replay_hazard_damage",
@@ -234,7 +234,7 @@ def hazard_damage(
         scope=scope.echo,
         sources=[],
         data=[HazardDamage(**row) for row in rows],
-        page=Page(limit=limit, offset=offset, total=total),
+        page=page,
     )
 
 
@@ -309,18 +309,12 @@ def page_rows(
     order: LiteralString,
     limit: int,
     offset: int,
-) -> tuple[list[dict[str, Any]], int]:
-    """One page of a replay table's rows in the scope, with the optional filters that have a value, and the total."""
+) -> tuple[list[dict[str, Any]], Page]:
+    """One page of a replay table's rows in the scope, with the optional filters that have a value."""
     conditions: list[LiteralString] = [scope.filter]
     args: list[Any] = list(scope.args)
     for condition, value in filters:
         if value is not None:
             conditions.append(condition)
             args.append(value)
-    where = " AND ".join(conditions)
-    total = conn.execute(f"SELECT COUNT(*) AS total FROM api.{table} WHERE {where}", args).fetchone()
-    rows = conn.execute(
-        f"SELECT {columns} FROM api.{table} WHERE {where} ORDER BY {order} LIMIT %s OFFSET %s",
-        (*args, limit, offset),
-    ).fetchall()
-    return rows, total["total"] if total else 0
+    return paginate(conn, columns, f"api.{table}", " AND ".join(conditions), order, args, limit, offset)

@@ -6,7 +6,7 @@ from typing import Annotated, Any, LiteralString
 from fastapi import APIRouter, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from api.db import Connection
+from api.db import Connection, paginate
 from api.params import (
     DEFAULT_FORMAT,
     EloBand,
@@ -20,7 +20,7 @@ from api.params import (
     parse_month,
     type_id,
 )
-from api.responses import BattleScope, Envelope, Page
+from api.responses import BattleScope, Envelope
 
 router = APIRouter(prefix="/v1/battles", tags=["Battles"])
 
@@ -109,6 +109,18 @@ class Event(BaseModel):
 
 SIDE_COLUMNS: LiteralString = "side, player, player_id, elo_before, elo_after, elo_band, result, team_type"
 BATTLE_COLUMNS: LiteralString = "replay_id, replay_url, rated, started_at, ended_at, turns, winner, ended_by"
+EVENT_COLUMNS: LiteralString = (
+    "event.seq, event.turn, event.side, event.pokemon, species.species, species.species_name, event.event, "
+    "event.detail, event.target_side, event.target_pokemon, target.species AS target_species, "
+    "target.species_name AS target_species_name, event.damage_percent, event.hp_after_percent, event.healed_percent, "
+    "event.caused_by_seq, event.source, event.source_inferred"
+)
+# Each event with its Pokémon's species, and its target's, in the form each was in at that event.
+EVENT_SOURCE: LiteralString = (
+    "api.replay_battle_event AS event "
+    "LEFT JOIN api.species AS species ON species.species_id = event.species_id "
+    "LEFT JOIN api.species AS target ON target.species_id = event.target_species_id"
+)
 
 
 @router.get("")
@@ -152,19 +164,16 @@ def search(
             + " AND ".join(side_conditions)
             + ")"
         )
-    where = " AND ".join(conditions)
-
-    total = conn.execute(f"SELECT COUNT(*) AS total FROM api.replay_battle AS battle WHERE {where}", args).fetchone()
-    battles = conn.execute(
-        f"""
-        SELECT {BATTLE_COLUMNS}
-        FROM api.replay_battle AS battle
-        WHERE {where}
-        ORDER BY battle.started_at DESC, battle.replay_id
-        LIMIT %s OFFSET %s
-        """,
-        (*args, limit, offset),
-    ).fetchall()
+    battles, page = paginate(
+        conn,
+        BATTLE_COLUMNS,
+        "api.replay_battle AS battle",
+        " AND ".join(conditions),
+        "battle.started_at DESC, battle.replay_id",
+        args,
+        limit,
+        offset,
+    )
     sides = sides_by_replay(conn, [battle["replay_id"] for battle in battles])
     return Envelope(
         scope=BattleScope(
@@ -172,7 +181,7 @@ def search(
         ),
         sources=[],
         data=[Battle(**battle, sides=sides.get(battle["replay_id"], [])) for battle in battles],
-        page=Page(limit=limit, offset=offset, total=total["total"] if total else 0),
+        page=page,
     )
 
 
@@ -217,30 +226,12 @@ def events(
     if turn is not None:
         conditions.append("event.turn = %s")
         args.append(turn)
-    where = " AND ".join(conditions)
-    total = conn.execute(
-        f"SELECT COUNT(*) AS total FROM api.replay_battle_event AS event WHERE {where}", args
-    ).fetchone()
-    rows = conn.execute(
-        f"""
-        SELECT event.seq, event.turn, event.side, event.pokemon, species.species, species.species_name, event.event,
-            event.detail, event.target_side, event.target_pokemon, target.species AS target_species,
-            target.species_name AS target_species_name, event.damage_percent, event.hp_after_percent,
-            event.healed_percent, event.caused_by_seq, event.source, event.source_inferred
-        FROM api.replay_battle_event AS event
-        LEFT JOIN api.species AS species ON species.species_id = event.species_id
-        LEFT JOIN api.species AS target ON target.species_id = event.target_species_id
-        WHERE {where}
-        ORDER BY event.seq
-        LIMIT %s OFFSET %s
-        """,
-        (*args, limit, offset),
-    ).fetchall()
+    rows, page = paginate(conn, EVENT_COLUMNS, EVENT_SOURCE, " AND ".join(conditions), "event.seq", args, limit, offset)
     return Envelope(
         scope=BattleScope(format=row["format"], month=format_month(row["report_month"])),
         sources=[],
         data=[Event(**event) for event in rows],
-        page=Page(limit=limit, offset=offset, total=total["total"] if total else 0),
+        page=page,
     )
 
 

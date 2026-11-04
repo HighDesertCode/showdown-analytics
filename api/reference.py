@@ -7,9 +7,9 @@ from typing import Annotated, Any, LiteralString
 from fastapi import APIRouter, HTTPException, Path
 from pydantic import BaseModel, Field
 
-from api.db import Connection
+from api.db import Connection, paginate
 from api.params import Limit, Offset, showdown_id
-from api.responses import Envelope, Page, ReferenceScope
+from api.responses import Envelope, ReferenceScope
 
 router = APIRouter(prefix="/v1/reference", tags=["Reference data"])
 
@@ -119,17 +119,8 @@ type ReferenceRow = Species | Type | Ability | Item | Move | Nature
 def entries(conn: Connection, kind: Kind, limit: Limit = 50, offset: Offset = 0) -> Envelope[ReferenceRows]:
     """Every entry of one kind, by Showdown ID."""
     query = KINDS[kind]
-    total = conn.execute(f"SELECT COUNT(*) AS total FROM api.{query.view}").fetchone()
-    rows = conn.execute(
-        f"SELECT {query.columns} FROM api.{query.view} ORDER BY {query.id_column} LIMIT %s OFFSET %s",
-        (limit, offset),
-    ).fetchall()
-    return Envelope(
-        scope=ReferenceScope(),
-        sources=[],
-        data=[build(query, row) for row in rows],
-        page=Page(limit=limit, offset=offset, total=total["total"] if total else 0),
-    )
+    rows, page = paginate(conn, query.columns, f"api.{query.view}", "TRUE", query.id_column, (), limit, offset)
+    return Envelope(scope=ReferenceScope(), sources=[], data=[build(query, row) for row in rows], page=page)
 
 
 @router.get("/{kind}/{name}")
