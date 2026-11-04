@@ -275,7 +275,7 @@ SECTIONS = {
 
 
 @router.get("/months")
-def months(conn: Connection, format: Format = DEFAULT_FORMAT) -> Envelope[list[AvailableMonth]]:
+def months(conn: Connection, format: Format = DEFAULT_FORMAT) -> Envelope[SmogonScope, list[AvailableMonth]]:
     """The months and baselines with Smogon statistics, newest first. Every month listed is complete."""
     rows = conn.execute(
         """
@@ -299,7 +299,7 @@ def usage(
     team_type: TeamType = None,
     limit: Limit = 50,
     offset: Offset = 0,
-) -> Envelope[list[PokemonUsage]]:
+) -> Envelope[SmogonScope, list[PokemonUsage]]:
     """Pokémon ranked by usage in one scope: a month, baseline, and either all teams or teams of one type."""
     scope = resolve_scope(conn, format, month, baseline, team_type)
     rows, page = paginate(
@@ -321,7 +321,7 @@ def pokemon(
     month: Month = None,
     baseline: Baseline = DEFAULT_BASELINE,
     team_type: TeamType = None,
-) -> Envelope[PokemonProfile]:
+) -> Envelope[SmogonScope, PokemonProfile]:
     """One Pokémon in one scope: its usage, how often it leads, and its most common abilities, items, moves,
     spreads, teammates, and checks and counters. Each list's full version is at /pokemon/{species}/{section}."""
     species_id = showdown_id(species, "species")
@@ -364,7 +364,7 @@ def pokemon_section(
     team_type: TeamType = None,
     limit: Limit = 50,
     offset: Offset = 0,
-) -> Envelope[SectionRows]:
+) -> Envelope[SmogonScope, SectionRows]:
     """Every ability, item, move, spread, teammate, or check and counter Smogon lists for one Pokémon in one scope,
     most common first (counters by Smogon's score)."""
     species_id = showdown_id(species, "species")
@@ -392,7 +392,7 @@ def leads(
     team_type: TeamType = None,
     limit: Limit = 50,
     offset: Offset = 0,
-) -> Envelope[list[PokemonLead]]:
+) -> Envelope[SmogonScope, list[PokemonLead]]:
     """Pokémon ranked by how often they are sent out first, in one scope."""
     scope = resolve_scope(conn, format, month, baseline, team_type)
     rows, page = paginate(
@@ -420,7 +420,7 @@ def metagame(
     month: Month = None,
     baseline: Baseline = DEFAULT_BASELINE,
     team_type: TeamType = None,
-) -> Envelope[Metagame]:
+) -> Envelope[SmogonScope, Metagame]:
     """The scope's sample size, average stalliness, and share of teams with each type, play style, and weather tag."""
     scope = resolve_scope(conn, format, month, baseline, team_type)
     tags = conn.execute(
@@ -455,7 +455,7 @@ def type_matchups(
     opponent_type: Type = None,
     limit: Limit = 50,
     offset: Offset = 0,
-) -> Envelope[list[TypeMatchup]]:
+) -> Envelope[SmogonScope, list[TypeMatchup]]:
     """Weighted wins and win rate for each team type against each other type, from Smogon's matchup chart, which
     covers all teams. Filter by type, opponent type, or both."""
     chart = resolve_chart(conn, format, month, baseline)
@@ -488,7 +488,7 @@ def type_matchups(
 @router.get("/type-viability", responses=NOT_FOUND)
 def type_viability(
     conn: Connection, format: Format = DEFAULT_FORMAT, month: Month = None, baseline: Baseline = DEFAULT_BASELINE
-) -> Envelope[list[TypeViability]]:
+) -> Envelope[SmogonScope, list[TypeViability]]:
     """Smogon's ViabilityScore for each team type, from its matchup chart, highest first. It is a published score,
     not a win rate."""
     chart = resolve_chart(conn, format, month, baseline)
@@ -511,7 +511,7 @@ def type_viability(
 @router.get("/source-files/{source_file_id}", responses=NOT_FOUND)
 def source_file(
     conn: Connection, source_file_id: Annotated[int, Path(description="The file's ID, from a response's sources.")]
-) -> Envelope[SourceFileDetail]:
+) -> Envelope[SmogonScope, SourceFileDetail]:
     """One Smogon file the statistics were loaded from: its URL, when it was downloaded, and its SHA-256, which
     identifies the exact version used."""
     row = conn.execute(

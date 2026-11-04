@@ -135,7 +135,7 @@ def search(
     player: Annotated[str | None, Query(description="Only battles this player played, by name or user ID.")] = None,
     limit: Limit = 50,
     offset: Offset = 0,
-) -> Envelope[list[Battle]]:
+) -> Envelope[BattleScope, list[Battle]]:
     """Public replays, newest first. Team type, Elo band, and player all apply to the same side, so
     player=X&team_type=water finds the battles X played with a Water team."""
     type_filter = type_id(team_type)
@@ -188,7 +188,7 @@ def search(
 
 
 @router.get("/{replay_id}", responses=NOT_FOUND)
-def battle(conn: Connection, replay_id: ReplayId) -> Envelope[BattleDetail]:
+def detail(conn: Connection, replay_id: ReplayId) -> Envelope[BattleScope, BattleDetail]:
     """One battle: its result, rules, and both players with the teams they showed at team preview."""
     row = find_battle(conn, replay_id, f"{BATTLE_COLUMNS}, rules, uploaded_at, format, report_month")
     teams: dict[str, list[PreviewedPokemon]] = {}
@@ -219,7 +219,7 @@ def events(
     turn: Annotated[int | None, Query(ge=0, description="Only this turn's events; 0 is before the first turn.")] = None,
     limit: Limit = 50,
     offset: Offset = 0,
-) -> Envelope[list[Event]]:
+) -> Envelope[BattleScope, list[Event]]:
     """Every game event in a battle in order: moves, switches, damage and healing, status, boosts, hazards, and
     revealed abilities and items. Causes the parser deduced are flagged with source_inferred."""
     row = find_battle(conn, replay_id, "format, report_month")

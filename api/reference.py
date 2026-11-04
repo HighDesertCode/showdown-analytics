@@ -119,7 +119,9 @@ type ReferenceRow = Species | Type | Ability | Item | Move | Nature
 
 
 @router.get("/{kind}")
-def entries(conn: Connection, kind: KindPath, limit: Limit = 50, offset: Offset = 0) -> Envelope[ReferenceRows]:
+def entries(
+    conn: Connection, kind: KindPath, limit: Limit = 50, offset: Offset = 0
+) -> Envelope[ReferenceScope, ReferenceRows]:
     """Every entry of one kind, by Showdown ID."""
     query = KINDS[kind]
     rows, page = paginate(conn, query.columns, f"api.{query.view}", "TRUE", query.id_column, (), limit, offset)
@@ -131,7 +133,7 @@ def entry(
     conn: Connection,
     kind: KindPath,
     name: Annotated[str, Path(description="The entry's Showdown ID or name, e.g. heavydutyboots or Heavy-Duty Boots.")],
-) -> Envelope[ReferenceRow]:
+) -> Envelope[ReferenceScope, ReferenceRow]:
     """One entry, by Showdown ID or name."""
     query = KINDS[kind]
     entry_id = showdown_id(name, query.view)

@@ -97,7 +97,7 @@ class HazardDamage(BaseModel):
 @router.get("/sample", responses=NOT_FOUND)
 def sample(
     conn: Connection, format: Format = DEFAULT_FORMAT, month: Month = None, elo_band: EloBand = None
-) -> Envelope[list[BandSample]]:
+) -> Envelope[ReplayScope, list[BandSample]]:
     """How many battles and teams the replay statistics rest on in a month, by Elo band. Check these before
     trusting a rate: a small band means a noisy one."""
     scope = resolve_scope(conn, format, month, elo_band)
@@ -123,7 +123,7 @@ def type_matchups(
     opponent_type: Type = None,
     limit: Limit = 50,
     offset: Offset = 0,
-) -> Envelope[list[ReplayTypeMatchup]]:
+) -> Envelope[ReplayScope, list[ReplayTypeMatchup]]:
     """Rated battles, wins, and win rate for each team type against each other type, by the team's Elo band."""
     scope = resolve_scope(conn, format, month, elo_band)
     rows, page = page_rows(
@@ -154,7 +154,7 @@ def leads(
     team_type: TeamType = None,
     limit: Limit = 50,
     offset: Offset = 0,
-) -> Envelope[list[ReplayLead]]:
+) -> Envelope[ReplayScope, list[ReplayLead]]:
     """How often each Pokémon leads a team of its type, and how often those teams win, by Elo band. Most common
     leads first within each type and band."""
     scope = resolve_scope(conn, format, month, elo_band)
@@ -186,7 +186,7 @@ def move_damage(
     move: Annotated[str | None, Query(description="Only this move, e.g. earthquake or Earthquake.")] = None,
     limit: Limit = 50,
     offset: Offset = 0,
-) -> Envelope[list[MoveDamage]]:
+) -> Envelope[ReplayScope, list[MoveDamage]]:
     """Direct hits from each Pokémon's moves on the opposing Pokémon, by the attacker's Elo band: hits, mean damage,
     and knockouts. Most hits first."""
     scope = resolve_scope(conn, format, month, elo_band)
@@ -217,7 +217,7 @@ def hazard_damage(
     team_type: TeamType = None,
     limit: Limit = 50,
     offset: Offset = 0,
-) -> Envelope[list[HazardDamage]]:
+) -> Envelope[ReplayScope, list[HazardDamage]]:
     """Damage from Stealth Rock and Spikes by the Elo band and inferred type of the team taking it."""
     scope = resolve_scope(conn, format, month, elo_band)
     rows, page = page_rows(

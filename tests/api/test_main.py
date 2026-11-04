@@ -31,6 +31,32 @@ def test_openapi_serves_every_endpoint(client):
     assert "/v1/smogon/pokemon/{species}/{section}" in response.json()["paths"]
 
 
+def test_openapi_names_each_operation_after_its_group_and_endpoint():
+    spec = create_app().openapi()
+
+    ids = [operation["operationId"] for operations in spec["paths"].values() for operation in operations.values()]
+    assert len(ids) == len(set(ids))
+    assert spec["paths"]["/v1/smogon/pokemon/{species}/{section}"]["get"]["operationId"] == "smogon_pokemon_section"
+    assert spec["paths"]["/v1/replays/type-matchups"]["get"]["operationId"] == "replays_type_matchups"
+    assert spec["paths"]["/v1/battles/{replay_id}/events"]["get"]["operationId"] == "battles_events"
+    assert spec["paths"]["/health"]["get"]["operationId"] == "health"
+
+
+def test_openapi_pins_each_endpoints_scope_type():
+    spec = create_app().openapi()
+    schemas = spec["components"]["schemas"]
+
+    def scope_of(path):
+        response = spec["paths"][path]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
+        envelope = schemas[response["$ref"].rsplit("/", 1)[1]]
+        return envelope["properties"]["scope"]["$ref"].rsplit("/", 1)[1]
+
+    assert scope_of("/v1/smogon/usage") == "SmogonScope"
+    assert scope_of("/v1/replays/leads") == "ReplayScope"
+    assert scope_of("/v1/battles") == "BattleScope"
+    assert scope_of("/v1/reference/{kind}") == "ReferenceScope"
+
+
 def test_openapi_describes_every_operation_parameter_and_field():
     # Agents read these descriptions, so none may be left out.
     spec = create_app().openapi()

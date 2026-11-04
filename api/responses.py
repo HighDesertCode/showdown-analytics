@@ -98,10 +98,12 @@ class Page(BaseModel):
     total: int = Field(description="Rows matching the request across every page.")
 
 
-class Envelope[T](BaseModel):
-    scope: SmogonScope | ReplayScope | BattleScope | ReferenceScope = Field(
-        discriminator="source",
-        description="What the data covers, with every default the API filled in; source says which kind of data it is.",
+class Envelope[S: SmogonScope | ReplayScope | BattleScope | ReferenceScope, T](BaseModel):
+    """The shape every response shares. S is the scope model of the endpoint's source, so each endpoint's schema says
+    exactly what its scope holds."""
+
+    scope: S = Field(
+        description="What the data covers, with every default the API filled in; source says which kind of data it is."
     )
     sources: list[SourceFile] = Field(
         description="The Smogon files behind this data; empty for replay and reference data."
