@@ -1,3 +1,5 @@
+{{ config(indexes=[{'columns': ['format', 'report_month', 'species']}]) }}
+-- The index serves the API's search by attacker, which filters on species rather than the primary key's species_id.
 -- Direct hits from each Pokémon's moves on the opposing Pokémon in rated public replays, by the attacker's Elo
 -- band. Damage is a percent of the target's max HP, capped at the HP it had left, so a strong move's mean
 -- understates it. Each hit of a multi-hit move counts separately. Recoil, items, abilities, and self-inflicted
