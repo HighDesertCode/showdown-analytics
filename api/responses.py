@@ -53,6 +53,24 @@ class ReplayScope(BaseModel):
     )
 
 
+class BattleScope(BaseModel):
+    """Which individual battles a response covers, with the search filters it applied."""
+
+    source: Literal["replay_battles"] = Field(
+        "replay_battles",
+        description=(
+            "Individual public Pokémon Showdown replays, as their logs show them: a sample of the battles players "
+            "chose to upload, not the whole ladder."
+        ),
+    )
+    format: str = Field(description="The Showdown format, e.g. gen9monotype.")
+    month: str | None = Field(None, description="Only battles that started in this UTC month, as YYYY-MM.")
+    rated: bool | None = Field(None, description="Only rated (true) or unrated (false) battles.")
+    team_type: str | None = Field(None, description="Only battles where a side's team had this inferred type.")
+    elo_band: int | None = Field(None, description="Only battles where a side's player was in this Elo band.")
+    player: str | None = Field(None, description="Only battles this player played, by Showdown user ID.")
+
+
 class SourceFile(BaseModel):
     """A Smogon file the data was loaded from."""
 
@@ -69,7 +87,7 @@ class Page(BaseModel):
 
 
 class Envelope[T](BaseModel):
-    scope: SmogonScope | ReplayScope = Field(discriminator="source")
+    scope: SmogonScope | ReplayScope | BattleScope = Field(discriminator="source")
     sources: list[SourceFile] = Field(
         description="The Smogon files behind this data; empty for replay data, where each battle is its own source."
     )

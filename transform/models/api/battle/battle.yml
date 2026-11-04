@@ -75,6 +75,12 @@ models:
       - name: player
         data_type: text
         constraints: [{type: not_null}]
+      - name: player_id
+        description: >
+          Showdown's user ID for the player: the name in lowercase letters and digits only, e.g. someplayer for
+          Some Player, so a search matches however the name is written.
+        data_type: text
+        constraints: [{type: not_null}]
       - name: elo_before
         description: The player's Elo before the battle; null if unrated.
         data_type: smallint

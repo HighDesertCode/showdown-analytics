@@ -7,7 +7,7 @@ import psycopg
 from fastapi import FastAPI, HTTPException, Request
 from psycopg_pool import ConnectionPool
 
-from api import replays, smogon
+from api import battles, replays, smogon
 from api.db import create_pool
 
 # How long the health check waits for a connection before reporting the database unavailable.
@@ -29,6 +29,7 @@ def create_app(pool: ConnectionPool | None = None) -> FastAPI:
     app = FastAPI(title="Showdown Analytics API", lifespan=lifespan)
     app.include_router(smogon.router)
     app.include_router(replays.router)
+    app.include_router(battles.router)
 
     @app.get("/health")
     def health(request: Request) -> dict[str, str]:
