@@ -17,7 +17,9 @@ concurrency:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    # Pinned: Docker 29 on ubuntu-latest (26.04) asks DigitalOcean's registry for push access in a form it rejects
+    # (401), while Docker 28 on 24.04 pushes normally. Revisit before GitHub retires the 24.04 image.
+    runs-on: ubuntu-24.04
     env:
       # The registry's name is a repository variable, not committed, like every other infrastructure identifier.
       IMAGE_REPOSITORY: registry.digitalocean.com/${{ vars.DOCR_REGISTRY }}/api
