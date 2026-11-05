@@ -12,3 +12,4 @@
 **/__pycache__
 api/Dockerfile
 api/Dockerfile.dockerignore
+api/app.yaml

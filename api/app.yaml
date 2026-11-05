@@ -1,0 +1,81 @@
+# App Platform spec for the public API. <Placeholders> are filled in only in the control panel or a local copy that
+# stays out of Git; secrets are set as encrypted SECRET variables, never written here. Like the pipelines app, change
+# the live app from its current spec (doctl apps spec get), never from this file, which would blank its secrets.
+name: showdown-analytics-api
+region: sfo
+vpc:
+  id: <vpc-id> # the database's VPC, so the API connects privately
+databases:
+  - name: showdown-db # attached for the trusted source and the bindable variables below
+    engine: PG
+    production: true
+    cluster_name: <cluster-name>
+    db_name: showdown-database
+    db_user: showdown-api # the API refuses any other role
+services:
+  - name: api
+    # A version the release workflow pushed; deploying another means changing this tag. The registry is the
+    # account's own, so it isn't named.
+    image:
+      registry_type: DOCR
+      repository: api
+      tag: "1.0.0"
+    http_port: 8080
+    instance_count: 1 # one instance holds at most 4 of showdown-api's 10 connections
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    # /health answers 503 when the database is unreachable, so a deployment that can't connect never goes live. Its
+    # own wait for a connection is 5 seconds, inside this timeout.
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 10
+      period_seconds: 30
+      timeout_seconds: 7
+      failure_threshold: 3
+    envs:
+      # The binding gives the public hostname; the private one adds this prefix, and verify-full rejects a mismatch.
+      - key: PGHOST
+        scope: RUN_TIME
+        value: private-${showdown-db.HOSTNAME}
+      - key: PGPORT
+        scope: RUN_TIME
+        value: ${showdown-db.PORT}
+      - key: PGDATABASE
+        scope: RUN_TIME
+        value: ${showdown-db.DATABASE}
+      - key: PGUSER
+        scope: RUN_TIME
+        value: ${showdown-db.USERNAME}
+      - key: PGPASSWORD
+        scope: RUN_TIME
+        value: ${showdown-db.PASSWORD}
+      - key: PGSSLMODE
+        scope: RUN_TIME
+        value: verify-full
+      # Written to a file at startup by api.db, since libpq reads the certificate only from a file.
+      - key: DATABASE_CA_CERT
+        scope: RUN_TIME
+        value: ${showdown-db.CA_CERT}
+      # The value Cloudflare sends in X-Origin-Secret; requests without it, other than /health, get a 403.
+      - key: ORIGIN_SECRET
+        scope: RUN_TIME
+        type: SECRET # set in the control panel
+    alerts:
+      - rule: RESTART_COUNT # email when the API keeps crashing or failing its health check
+        operator: GREATER_THAN
+        value: 3
+        window: FIVE_MINUTES
+      - rule: CPU_UTILIZATION
+        operator: GREATER_THAN
+        value: 80
+        window: FIVE_MINUTES
+      - rule: MEM_UTILIZATION
+        operator: GREATER_THAN
+        value: 80
+        window: FIVE_MINUTES
+# Cloudflare holds the domain's DNS and proxies it to the app, so no zone is given here.
+domains:
+  - domain: <api-domain>
+    type: PRIMARY
+alerts:
+  - rule: DEPLOYMENT_FAILED # email when a deployment fails, including on its health check
+  - rule: DOMAIN_FAILED # email when the custom domain or its certificate stops working
