@@ -74,11 +74,18 @@ jobs:
         run: doctl registry login --expiry-seconds 600
 
       # A version is pushed once: App Platform deploys pinned tags, so overwriting one would change a deployed app.
+      # The registry is asked directly, and any error from it stops the release (the shell exits on a failed
+      # command), so only an answer that the tag isn't there lets the push go ahead. Listing the tags of a
+      # repository that doesn't exist yet is an error, so the first release checks the repository first.
       - name: Check Version Is New
         run: |
-          if docker manifest inspect "$IMAGE_REPOSITORY:$VERSION" > /dev/null 2>&1; then
-            echo "::error::$VERSION is already in the registry; bump the version in pyproject.toml for a new release."
-            exit 1
+          repositories="$(doctl registry repository list-v2 --format Name --no-header)"
+          if grep -qx api <<< "$repositories"; then
+            tags="$(doctl registry repository list-tags api --format Tag --no-header)"
+            if grep -qx "$VERSION" <<< "$tags"; then
+              echo "::error::$VERSION is already in the registry; bump the version in pyproject.toml for a new release."
+              exit 1
+            fi
           fi
 
       - name: Push Image
