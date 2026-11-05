@@ -19,7 +19,7 @@ services:
     image:
       registry_type: DOCR
       repository: api
-      tag: "1.0.0"
+      tag: "1.0.1"
     http_port: 8080
     instance_count: 1 # one instance holds at most 4 of showdown-api's 10 connections
     instance_size_slug: apps-s-1vcpu-0.5gb
