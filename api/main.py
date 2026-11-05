@@ -35,7 +35,8 @@ FORBIDDEN_DETAIL = "Call the API through its public address."
 # What an agent reads first: the sources, why they're never comparable, and the shape every response shares.
 DESCRIPTION = (
     "Competitive Pokémon statistics for Gen 9 Monotype, from two sources that are never comparable: Smogon's monthly "
-    "usage reports, which cover every rated ladder battle and weight each team by a rating baseline (1630 or 1760), "
+    "usage reports, which cover every rated ladder battle and weight each team by a rating baseline (1630 or 1760; a "
+    "weighting, not a rating cutoff: every rated battle counts, higher-rated players' teams more), "
     "and public Pokémon Showdown replays, a sample of the battles players chose to upload, grouped by Elo band (1000, "
     "1200, 1400, or 1600 and up). Every response has the same shape: scope says what the data covers and which source "
     "it came from, with every default filled in; sources lists the Smogon files behind it; data holds the rows; page "

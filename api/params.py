@@ -48,7 +48,10 @@ BattleMonth = Annotated[
 ]
 Baseline = Annotated[
     int,
-    Query(description="The rating baseline teams are weighted by. 1630 reflects good players, 1760 strong players."),
+    Query(
+        description="The rating baseline teams are weighted by, not a rating cutoff: every rated battle counts, and "
+        "higher-rated players' teams count more. 1630 reflects good players, 1760 strong players."
+    ),
 ]
 TeamType = Annotated[
     str | None,
