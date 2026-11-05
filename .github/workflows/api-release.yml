@@ -17,11 +17,10 @@ concurrency:
 
 jobs:
   release:
-    # Pinned: Docker 29 on ubuntu-latest (26.04) asks DigitalOcean's registry for push access in a form it rejects
-    # (401), while Docker 28 on 24.04 pushes normally. Revisit before GitHub retires the 24.04 image.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     env:
-      # The registry's name is a repository variable, not committed, like every other infrastructure identifier.
+      # DOCR_REGISTRY holds only the registry's name (not registry.digitalocean.com/<name>), as a repository variable
+      # rather than committed, like every other infrastructure identifier.
       IMAGE_REPOSITORY: registry.digitalocean.com/${{ vars.DOCR_REGISTRY }}/api
     steps:
       # The full history, so the next step can check that the tagged commit is on main.
@@ -65,20 +64,15 @@ jobs:
           fail-build: true
           output-format: table
 
-      # The token is limited to the registry; it can't touch the database, apps, or anything else. doctl reads the
-      # registry's tags for the version check below.
+      # The token is limited to the registry; it can't touch the database, apps, or anything else.
       - name: Install doctl
         uses: digitalocean/action-doctl@v2
         with:
           token: ${{ secrets.DOCR_TOKEN }}
 
-      # Docker logs in with the token itself. doctl registry login would instead give Docker a separate token that
-      # DigitalOcean creates with only read and update access, and pushes made with it were refused. DigitalOcean takes
-      # the token as both username and password; GitHub masks it wherever it would appear in the log.
+      # Docker gets short-lived credentials of its own, which expire after ten minutes, well past the push.
       - name: Registry Login
-        env:
-          DOCR_TOKEN: ${{ secrets.DOCR_TOKEN }}
-        run: docker login registry.digitalocean.com --username "$DOCR_TOKEN" --password-stdin <<< "$DOCR_TOKEN"
+        run: doctl registry login --expiry-seconds 600
 
       # A version is pushed once: App Platform deploys pinned tags, so overwriting one would change a deployed app.
       # The registry is asked directly, and any error from it stops the release (the shell exits on a failed
