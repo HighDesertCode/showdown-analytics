@@ -1,6 +1,6 @@
 # API Architecture
 
-Showdown Analytics will publish its competitive Pokémon statistics through a free, read-only web API, starting with Gen 9 Monotype. It is built for people and for AI agents, such as ChatGPT, that answer questions about the metagame. The API is in development; this page describes what it will offer.
+Showdown Analytics will publish its competitive Pokémon statistics through a free, read-only web API, starting with Gen 9 Monotype. It is built for people and for AI agents that answer questions about the metagame. The API is in development; this page describes what it will offer.
 
 ## Data
 
@@ -47,6 +47,6 @@ Every statistic says what it measures and where it came from:
 
 ## Access
 
-The API will be public and require no account. It will be documented with an OpenAPI schema, so AI agents and other clients can discover its endpoints. Requests are rate limited to keep the service available for everyone.
+The API will be public and require no account. It will be documented with an OpenAPI schema, so AI agents and other clients can discover its endpoints. Requests are rate limited to keep the service available for everyone, and responses may be cached for a few minutes, since the data changes at most daily.
 
 The API only reads published statistics. It cannot change data, and private research data is never reachable through it.

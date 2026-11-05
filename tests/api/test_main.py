@@ -3,6 +3,7 @@ from pathlib import Path
 
 import psycopg
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
@@ -49,6 +50,76 @@ def test_a_query_past_the_statement_timeout_is_a_503_with_a_retry_hint():
     assert response.json() == {
         "detail": "The query took too long; try again shortly, with a smaller limit or a narrower filter."
     }
+
+
+def app_with_test_routes():
+    """An app with a /v1 route that answers without the database, and one that's never found."""
+    app = create_app(unreachable_pool())
+
+    @app.get("/v1/test/ok")
+    def ok() -> dict[str, str]:
+        return {"status": "ok"}
+
+    @app.get("/v1/test/missing")
+    def missing() -> None:
+        raise HTTPException(status_code=404, detail="Not here")
+
+    return app
+
+
+def test_successful_data_responses_are_cacheable_for_ten_minutes():
+    with TestClient(app_with_test_routes()) as client:
+        response = client.get("/v1/test/ok")
+
+    assert response.headers["cache-control"] == "public, max-age=600"
+
+
+@pytest.mark.parametrize("path", ["/v1/test/missing", "/v1/smogon/usage?month=9999-12", "/openapi.json"])
+def test_errors_and_responses_outside_v1_are_never_cached(path):
+    with TestClient(app_with_test_routes()) as client:
+        response = client.get(path)
+
+    assert response.headers["cache-control"] == "no-store"
+
+
+def test_a_503_and_the_health_check_are_never_cached(monkeypatch):
+    monkeypatch.setattr("api.main.HEALTH_TIMEOUT_SECONDS", 1)
+    with TestClient(create_app(unreachable_pool())) as client:
+        response = client.get("/health")
+
+    assert response.status_code == 503
+    assert response.headers["cache-control"] == "no-store"
+
+
+@pytest.fixture
+def origin_secret(monkeypatch):
+    monkeypatch.setenv("ORIGIN_SECRET", "s3cret")
+
+
+@pytest.mark.parametrize("headers", [{}, {"X-Origin-Secret": "wrong"}])
+def test_with_an_origin_secret_requests_that_skipped_cloudflare_are_refused(origin_secret, headers):
+    with TestClient(app_with_test_routes()) as client:
+        response = client.get("/v1/test/ok", headers=headers)
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Call the API through its public address."}
+    assert response.headers["cache-control"] == "no-store"
+
+
+def test_with_an_origin_secret_requests_through_cloudflare_are_answered(origin_secret):
+    with TestClient(app_with_test_routes()) as client:
+        response = client.get("/v1/test/ok", headers={"X-Origin-Secret": "s3cret"})
+
+    assert response.status_code == 200
+
+
+def test_with_an_origin_secret_the_health_check_still_answers_app_platform(origin_secret, monkeypatch):
+    # App Platform's health checks call the app directly, without Cloudflare's header.
+    monkeypatch.setattr("api.main.HEALTH_TIMEOUT_SECONDS", 1)
+    with TestClient(create_app(unreachable_pool())) as client:
+        response = client.get("/health")
+
+    assert response.status_code == 503
 
 
 @pytest.mark.parametrize(
