@@ -24,7 +24,7 @@ The endpoints are grouped by where their data comes from. All of them are versio
 | Battles | Which battles did a player upload? What happened in a given battle, turn by turn? |
 | Reference data | What are a Pokémon's base stats? What does a move or item do? |
 
-Filters left out get sensible defaults, such as the latest month and the 1630 baseline, and accept names as well as Showdown IDs (`Ninetales-Alola` or `ninetalesalola`). Long lists are returned in pages.
+Filters left out get sensible defaults, such as the latest month (for replay statistics, the latest complete one) and the 1630 baseline, and accept names as well as Showdown IDs (`Ninetales-Alola` or `ninetalesalola`). Long lists are returned in pages.
 
 ## Responses
 
