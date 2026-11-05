@@ -215,8 +215,8 @@ def test_create_pool_accepts_the_api_role_with_verified_tls(api_settings):
     assert pool.max_size == 4
 
 
-def test_create_pool_runs_in_autocommit_mode_with_dict_rows(api_settings):
-    assert create_pool().kwargs == {"autocommit": True, "row_factory": dict_row}
+def test_create_pool_runs_in_autocommit_mode_with_dict_rows_and_a_connect_timeout(api_settings):
+    assert create_pool().kwargs == {"autocommit": True, "row_factory": dict_row, "connect_timeout": 5}
 
 
 @pytest.mark.parametrize("user", ["showdown-analyst", "showdown-transform", "doadmin"])

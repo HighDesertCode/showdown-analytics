@@ -28,7 +28,10 @@ API_ROLE = "showdown-api"
 MAX_CONNECTIONS = 4
 # Every pooled connection runs in autocommit mode, so a request's reads don't pay for BEGIN and COMMIT round trips
 # (under READ COMMITTED each statement sees its own snapshot either way), and returns rows as dicts.
-CONNECTION_KWARGS: dict[str, Any] = {"autocommit": True, "row_factory": dict_row}
+CONNECTION_KWARGS: dict[str, Any] = {"autocommit": True, "row_factory": dict_row, "connect_timeout": 5}
+# connect_timeout (seconds) makes an attempt that gets no answer fail, so the pool logs why ("error connecting in
+# 'pool-1': connection timeout expired"). Without it, a firewall that drops packets, such as a database whose trusted
+# sources leave the app out, keeps the attempt waiting while every request only answers 503.
 # Holds the CA certificate's text where it can't be a file, as in App Platform's environment variables.
 CA_CERT_SETTING = "DATABASE_CA_CERT"
 
