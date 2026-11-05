@@ -1,12 +1,14 @@
 """The FastAPI app. Run it with `uv run --group api --env-file .env.api uvicorn api.main:app`."""
 
-from collections.abc import AsyncGenerator
+import hmac
+import os
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from importlib.metadata import version
 
 import psycopg
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.routing import APIRoute
 from psycopg_pool import ConnectionPool
 
@@ -20,6 +22,16 @@ HEALTH_TIMEOUT_SECONDS = 5
 RETRY_AFTER_SECONDS = 5
 QUERY_TIMEOUT_DETAIL = "The query took too long; try again shortly, with a smaller limit or a narrower filter."
 UNAVAILABLE_DETAIL = "Database unavailable; try again shortly."
+# Cloudflare sits in front of the API: it rate limits clients and caches responses for as long as Cache-Control
+# allows. The data changes only after the daily builds, so a successful answer is reusable for ten minutes.
+CACHE_SECONDS = 600
+# Cloudflare adds this header, holding the secret in ORIGIN_SECRET, to every request it forwards, so a request
+# without it skipped Cloudflare's rate limits by calling the app's own address. Unset (as locally), nothing is checked.
+ORIGIN_SECRET_SETTING = "ORIGIN_SECRET"
+ORIGIN_HEADER = "X-Origin-Secret"
+# App Platform's health checks reach the app directly, not through Cloudflare, and need a live answer every time.
+HEALTH_PATH = "/health"
+FORBIDDEN_DETAIL = "Call the API through its public address."
 # What an agent reads first: the sources, why they're never comparable, and the shape every response shares.
 DESCRIPTION = (
     "Competitive Pokémon statistics for Gen 9 Monotype, from two sources that are never comparable: Smogon's monthly "
@@ -29,7 +41,7 @@ DESCRIPTION = (
     "it came from, with every default filled in; sources lists the Smogon files behind it; data holds the rows; page "
     "gives the total for paginated lists. Shares run from 0 to 1 and each field's description names its denominator. "
     "Filters take names as well as Showdown IDs (Ninetales-Alola or ninetalesalola), and the latest month is the "
-    "default."
+    "default (for replay statistics, the latest complete month)."
 )
 TAGS = [
     {
@@ -85,7 +97,24 @@ def create_app(pool: ConnectionPool | None = None) -> FastAPI:
     app.include_router(battles.router)
     app.include_router(reference.router)
 
-    @app.get("/health")
+    origin_secret = os.environ.get(ORIGIN_SECRET_SETTING, "")
+
+    @app.middleware("http")
+    async def edge(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+        """Refuses requests that didn't come through Cloudflare, and tells Cloudflare which answers it may cache:
+        only successful GETs of the data under /v1, never an error, a 503, or the health check."""
+        if origin_secret and request.url.path != HEALTH_PATH:
+            sent = request.headers.get(ORIGIN_HEADER, "")
+            if not hmac.compare_digest(sent.encode(), origin_secret.encode()):
+                return JSONResponse(
+                    status_code=403, content={"detail": FORBIDDEN_DETAIL}, headers={"Cache-Control": "no-store"}
+                )
+        response = await call_next(request)
+        cacheable = request.method == "GET" and response.status_code == 200 and request.url.path.startswith("/v1/")
+        response.headers["Cache-Control"] = f"public, max-age={CACHE_SECONDS}" if cacheable else "no-store"
+        return response
+
+    @app.get(HEALTH_PATH)
     def health(request: Request) -> dict[str, str]:
         """Whether the API is running and can reach the database; a 503 when it can't."""
         with request.app.state.pool.connection(timeout=HEALTH_TIMEOUT_SECONDS) as conn:

@@ -29,6 +29,16 @@ Month = Annotated[
     str | None,
     Query(pattern=MONTH_PATTERN, description="The reporting month, as YYYY-MM. Defaults to the latest month."),
 ]
+ReplayMonth = Annotated[
+    str | None,
+    Query(
+        pattern=MONTH_PATTERN,
+        description=(
+            "The UTC month the battles started, as YYYY-MM. Defaults to the latest complete month, so the numbers"
+            " don't shift while you read them; ask for the current month to get its partial counts."
+        ),
+    ),
+]
 BattleMonth = Annotated[
     str | None,
     Query(
@@ -101,3 +111,8 @@ def month_bounds(month: date) -> tuple[datetime, datetime]:
     start = datetime(month.year, month.month, 1, tzinfo=UTC)
     end = datetime(month.year + month.month // 12, month.month % 12 + 1, 1, tzinfo=UTC)
     return start, end
+
+
+def current_month() -> date:
+    """The first day of the month in progress, in UTC, the time zone replays are grouped by."""
+    return datetime.now(UTC).date().replace(day=1)

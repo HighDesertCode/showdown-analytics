@@ -2,11 +2,15 @@
 
 Settings come from libpq's standard PG* environment variables, loaded from .env.api by `uv run --env-file .env.api`.
 The API connects only as showdown-api, which can read the api schema and nothing else, and only with
-PGSSLMODE=verify-full to a database that isn't local.
+PGSSLMODE=verify-full to a database that isn't local. On App Platform, the attached database supplies its CA
+certificate as text in DATABASE_CA_CERT, which the pool writes to a file for libpq.
 """
 
+import atexit
 import os
+import tempfile
 from collections.abc import Iterator, Sequence
+from pathlib import Path
 from typing import Annotated, Any, LiteralString
 
 import psycopg
@@ -25,6 +29,30 @@ MAX_CONNECTIONS = 4
 # Every pooled connection runs in autocommit mode, so a request's reads don't pay for BEGIN and COMMIT round trips
 # (under READ COMMITTED each statement sees its own snapshot either way), and returns rows as dicts.
 CONNECTION_KWARGS: dict[str, Any] = {"autocommit": True, "row_factory": dict_row}
+# Holds the CA certificate's text where it can't be a file, as in App Platform's environment variables.
+CA_CERT_SETTING = "DATABASE_CA_CERT"
+
+
+def use_ca_cert_from_environment() -> None:
+    """Writes the certificate in DATABASE_CA_CERT to a file and points PGSSLROOTCERT at it.
+
+    libpq reads the CA certificate only from a file. Does nothing when DATABASE_CA_CERT isn't set, as locally,
+    where .env.api names the file in PGSSLROOTCERT. pipelines.db does the same; the API keeps its own copy so it
+    never depends on the ingestion code.
+    """
+    pem = os.environ.get(CA_CERT_SETTING)
+    if not pem:
+        return
+    if os.environ.get("PGSSLROOTCERT"):
+        raise RuntimeError(f"Set {CA_CERT_SETTING} or PGSSLROOTCERT, not both")
+    if not pem.lstrip().startswith("-----BEGIN CERTIFICATE-----"):
+        raise RuntimeError(f"{CA_CERT_SETTING} doesn't hold a PEM certificate")
+    # A new file only this user can read, removed when the API exits.
+    fd, path = tempfile.mkstemp(prefix="database-ca-", suffix=".crt")
+    with os.fdopen(fd, "w") as file:
+        file.write(pem)
+    atexit.register(Path(path).unlink, missing_ok=True)
+    os.environ["PGSSLROOTCERT"] = path
 
 
 def create_pool() -> ConnectionPool:
@@ -36,6 +64,7 @@ def create_pool() -> ConnectionPool:
         raise RuntimeError(f"Refusing to connect as {os.environ['PGUSER']}; the API connects only as {API_ROLE}.")
     if os.environ["PGHOST"] not in LOCAL_HOSTS and os.environ.get("PGSSLMODE") != "verify-full":
         raise RuntimeError("Refusing to connect without PGSSLMODE=verify-full to a database that isn't local.")
+    use_ca_cert_from_environment()
     # An empty conninfo, so libpq reads the PG* variables.
     return ConnectionPool("", min_size=1, max_size=MAX_CONNECTIONS, kwargs=CONNECTION_KWARGS, open=False)
 

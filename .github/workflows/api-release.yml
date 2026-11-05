@@ -1,0 +1,92 @@
+name: API Release
+
+# Pushing a tag like api-v1.0.0 builds, scans, and pushes the API image to the container registry as api:1.0.0.
+# App Platform deploys a pinned version from there. This is the only workflow that pushes an image.
+on:
+  push:
+    tags:
+      - "api-v*"
+
+permissions:
+  contents: read
+
+# Two pushes of the same tag never race each other.
+concurrency:
+  group: api-release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      # The registry's name is a repository variable, not committed, like every other infrastructure identifier.
+      IMAGE_REPOSITORY: registry.digitalocean.com/${{ vars.DOCR_REGISTRY }}/api
+    steps:
+      # The full history, so the next step can check that the tagged commit is on main.
+      - name: Repository Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # The tag, the image, and the version the API reports in /openapi.json must all agree, and a release must come
+      # from reviewed code on main, not from a branch.
+      - name: Check Tag
+        run: |
+          version="${GITHUB_REF_NAME#api-v}"
+          project_version="$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")"
+          if [ "$version" != "$project_version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match version $project_version in pyproject.toml."
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Tag $GITHUB_REF_NAME points to a commit that isn't on main."
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Build Image
+        run: docker build -f api/Dockerfile -t "$IMAGE_REPOSITORY:$VERSION" .
+
+      - name: Check App
+        run: |
+          docker run --rm "$IMAGE_REPOSITORY:$VERSION" python -c "from api.main import app; print(app.title, app.version)"
+
+      # A release fails on a fixable Critical vulnerability, so no image with a known, fixable critical problem is ever
+      # pushed; High ones don't block it and still show in the weekly scans' code scanning alerts. Unfixed
+      # vulnerabilities never block, since only a fix could clear them. Rebuild once the base image has the fix.
+      - name: Scan Image
+        uses: anchore/scan-action@v7.4.2
+        with:
+          image: ${{ env.IMAGE_REPOSITORY }}:${{ env.VERSION }}
+          only-fixed: true
+          severity-cutoff: critical
+          fail-build: true
+          output-format: table
+
+      # The token is limited to the registry; it can't touch the database, apps, or anything else.
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DOCR_TOKEN }}
+
+      # Credentials expire after ten minutes, well past the push.
+      - name: Registry Login
+        run: doctl registry login --expiry-seconds 600
+
+      # A version is pushed once: App Platform deploys pinned tags, so overwriting one would change a deployed app.
+      # The registry is asked directly, and any error from it stops the release (the shell exits on a failed
+      # command), so only an answer that the tag isn't there lets the push go ahead. Listing the tags of a
+      # repository that doesn't exist yet is an error, so the first release checks the repository first.
+      - name: Check Version Is New
+        run: |
+          repositories="$(doctl registry repository list-v2 --format Name --no-header)"
+          if grep -qx api <<< "$repositories"; then
+            tags="$(doctl registry repository list-tags api --format Tag --no-header)"
+            if grep -qx "$VERSION" <<< "$tags"; then
+              echo "::error::$VERSION is already in the registry; bump the version in pyproject.toml for a new release."
+              exit 1
+            fi
+          fi
+
+      - name: Push Image
+        run: docker push "$IMAGE_REPOSITORY:$VERSION"

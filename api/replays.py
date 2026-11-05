@@ -4,7 +4,7 @@ They count rated battles only, and are kept apart from Smogon's ladder-wide stat
 """
 
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import date
 from typing import Annotated, Any, LiteralString
 
 from fastapi import APIRouter, HTTPException, Query
@@ -16,10 +16,11 @@ from api.params import (
     EloBand,
     Format,
     Limit,
-    Month,
     Offset,
+    ReplayMonth,
     TeamType,
     Type,
+    current_month,
     format_month,
     optional_id,
     parse_month,
@@ -96,7 +97,7 @@ class HazardDamage(BaseModel):
 
 @router.get("/sample", responses=NOT_FOUND)
 def sample(
-    conn: Connection, format: Format = DEFAULT_FORMAT, month: Month = None, elo_band: EloBand = None
+    conn: Connection, format: Format = DEFAULT_FORMAT, month: ReplayMonth = None, elo_band: EloBand = None
 ) -> Envelope[ReplayScope, list[BandSample]]:
     """How many battles and teams the replay statistics rest on in a month, by Elo band. Check these before
     trusting a rate: a small band means a noisy one."""
@@ -117,7 +118,7 @@ def sample(
 def type_matchups(
     conn: Connection,
     format: Format = DEFAULT_FORMAT,
-    month: Month = None,
+    month: ReplayMonth = None,
     elo_band: EloBand = None,
     type: Type = None,
     opponent_type: Type = None,
@@ -150,7 +151,7 @@ def type_matchups(
 def leads(
     conn: Connection,
     format: Format = DEFAULT_FORMAT,
-    month: Month = None,
+    month: ReplayMonth = None,
     elo_band: EloBand = None,
     team_type: TeamType = None,
     limit: Limit = 50,
@@ -182,7 +183,7 @@ def leads(
 def move_damage(
     conn: Connection,
     format: Format = DEFAULT_FORMAT,
-    month: Month = None,
+    month: ReplayMonth = None,
     elo_band: EloBand = None,
     species: Annotated[str | None, Query(description="Only this attacker, e.g. swampert or Swampert.")] = None,
     move: Annotated[str | None, Query(description="Only this move, e.g. earthquake or Earthquake.")] = None,
@@ -215,7 +216,7 @@ def move_damage(
 def hazard_damage(
     conn: Connection,
     format: Format = DEFAULT_FORMAT,
-    month: Month = None,
+    month: ReplayMonth = None,
     elo_band: EloBand = None,
     team_type: TeamType = None,
     limit: Limit = 50,
@@ -270,7 +271,7 @@ class Scope:
         return ReplayScope(
             format=self.format,
             month=format_month(self.month),
-            partial_month=self.month >= datetime.now(UTC).date().replace(day=1),
+            partial_month=self.month >= current_month(),
             elo_band=self.elo_band,
             battle_count=self.battle_count,
             rated_battle_count=self.rated_battle_count,
@@ -278,14 +279,23 @@ class Scope:
 
 
 def resolve_scope(conn: Connection, format: str, month: str | None, elo_band: int | None) -> Scope:
-    """Fills in the default month (the latest with replays) and reads its sample size; a 404 when it has none."""
+    """Fills in the default month and reads its sample size; a 404 when it has none.
+
+    The default is the latest complete month, so an agent isn't handed a few days of replays as a month's numbers.
+    Only when no month has finished yet is it the month in progress, which the scope flags as partial.
+    """
     if month is None:
         row = conn.execute(
-            "SELECT MAX(report_month) AS latest FROM api.replay_sample WHERE format = %s", (format,)
+            """
+            SELECT COALESCE(MAX(report_month) FILTER (WHERE report_month < %s), MAX(report_month)) AS default_month
+            FROM api.replay_sample
+            WHERE format = %s
+            """,
+            (current_month(), format),
         ).fetchone()
-        if row is None or row["latest"] is None:
+        if row is None or row["default_month"] is None:
             raise HTTPException(status_code=404, detail=f"No replay statistics for {format}")
-        replay_month = row["latest"]
+        replay_month = row["default_month"]
     else:
         replay_month = parse_month(month)
     sample = conn.execute(

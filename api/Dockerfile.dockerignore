@@ -1,0 +1,15 @@
+# An allowlist for api/Dockerfile: only the files the API image needs are sent to the build, so secrets such as
+# .env and .env.api, local environments, and Git history can never end up in an image. BuildKit reads this file
+# instead of the root .dockerignore because it sits next to the Dockerfile with the same name.
+*
+!pyproject.toml
+!uv.lock
+!.python-version
+!README.md
+# Hatch builds the project's package from pipelines/; the API reads its version from that package's metadata.
+!pipelines/
+!api/
+**/__pycache__
+api/Dockerfile
+api/Dockerfile.dockerignore
+api/app.yaml

@@ -60,9 +60,32 @@ def test_sample_is_labeled_as_uploaded_replays_and_defaults_to_the_latest_month(
     assert [row["elo_band"] for row in body["data"]] == [1000, 1200, 1400, 1600]
 
 
-def test_sample_flags_the_month_in_progress(client, insert):
-    this_month = datetime.now(UTC).date().replace(day=1)
-    add_sample(insert, month=this_month)
+def this_month():
+    return datetime.now(UTC).date().replace(day=1)
+
+
+def test_sample_defaults_to_the_latest_complete_month_not_the_one_in_progress(client, insert):
+    add_sample(insert)
+    add_sample(insert, month=this_month())
+
+    body = client.get("/v1/replays/sample").json()
+
+    assert body["scope"]["month"] == "2026-09"
+    assert body["scope"]["partial_month"] is False
+
+
+def test_sample_gives_the_month_in_progress_when_asked_and_flags_it(client, insert):
+    add_sample(insert)
+    add_sample(insert, month=this_month())
+
+    body = client.get("/v1/replays/sample", params={"month": this_month().strftime("%Y-%m")}).json()
+
+    assert body["scope"]["month"] == this_month().strftime("%Y-%m")
+    assert body["scope"]["partial_month"] is True
+
+
+def test_sample_falls_back_to_the_month_in_progress_when_no_month_is_complete(client, insert):
+    add_sample(insert, month=this_month())
 
     body = client.get("/v1/replays/sample").json()
 

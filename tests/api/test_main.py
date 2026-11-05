@@ -1,9 +1,14 @@
+import os
+from pathlib import Path
+
 import psycopg
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
+from api import db
 from api.db import create_pool
 from api.main import create_app
 
@@ -45,6 +50,76 @@ def test_a_query_past_the_statement_timeout_is_a_503_with_a_retry_hint():
     assert response.json() == {
         "detail": "The query took too long; try again shortly, with a smaller limit or a narrower filter."
     }
+
+
+def app_with_test_routes():
+    """An app with a /v1 route that answers without the database, and one that's never found."""
+    app = create_app(unreachable_pool())
+
+    @app.get("/v1/test/ok")
+    def ok() -> dict[str, str]:
+        return {"status": "ok"}
+
+    @app.get("/v1/test/missing")
+    def missing() -> None:
+        raise HTTPException(status_code=404, detail="Not here")
+
+    return app
+
+
+def test_successful_data_responses_are_cacheable_for_ten_minutes():
+    with TestClient(app_with_test_routes()) as client:
+        response = client.get("/v1/test/ok")
+
+    assert response.headers["cache-control"] == "public, max-age=600"
+
+
+@pytest.mark.parametrize("path", ["/v1/test/missing", "/v1/smogon/usage?month=9999-12", "/openapi.json"])
+def test_errors_and_responses_outside_v1_are_never_cached(path):
+    with TestClient(app_with_test_routes()) as client:
+        response = client.get(path)
+
+    assert response.headers["cache-control"] == "no-store"
+
+
+def test_a_503_and_the_health_check_are_never_cached(monkeypatch):
+    monkeypatch.setattr("api.main.HEALTH_TIMEOUT_SECONDS", 1)
+    with TestClient(create_app(unreachable_pool())) as client:
+        response = client.get("/health")
+
+    assert response.status_code == 503
+    assert response.headers["cache-control"] == "no-store"
+
+
+@pytest.fixture
+def origin_secret(monkeypatch):
+    monkeypatch.setenv("ORIGIN_SECRET", "s3cret")
+
+
+@pytest.mark.parametrize("headers", [{}, {"X-Origin-Secret": "wrong"}])
+def test_with_an_origin_secret_requests_that_skipped_cloudflare_are_refused(origin_secret, headers):
+    with TestClient(app_with_test_routes()) as client:
+        response = client.get("/v1/test/ok", headers=headers)
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Call the API through its public address."}
+    assert response.headers["cache-control"] == "no-store"
+
+
+def test_with_an_origin_secret_requests_through_cloudflare_are_answered(origin_secret):
+    with TestClient(app_with_test_routes()) as client:
+        response = client.get("/v1/test/ok", headers={"X-Origin-Secret": "s3cret"})
+
+    assert response.status_code == 200
+
+
+def test_with_an_origin_secret_the_health_check_still_answers_app_platform(origin_secret, monkeypatch):
+    # App Platform's health checks call the app directly, without Cloudflare's header.
+    monkeypatch.setattr("api.main.HEALTH_TIMEOUT_SECONDS", 1)
+    with TestClient(create_app(unreachable_pool())) as client:
+        response = client.get("/health")
+
+    assert response.status_code == 503
 
 
 @pytest.mark.parametrize(
@@ -129,6 +204,9 @@ def api_settings(monkeypatch):
         "PGSSLMODE": "verify-full",
     }.items():
         monkeypatch.setenv(name, value)
+    # Deleting them through monkeypatch also restores them after the test, since create_pool can set PGSSLROOTCERT.
+    monkeypatch.delenv("DATABASE_CA_CERT", raising=False)
+    monkeypatch.delenv("PGSSLROOTCERT", raising=False)
 
 
 def test_create_pool_accepts_the_api_role_with_verified_tls(api_settings):
@@ -161,3 +239,51 @@ def test_create_pool_requires_settings(api_settings, monkeypatch):
 
     with pytest.raises(RuntimeError, match="PGHOST"):
         create_pool()
+
+
+PEM = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n"
+
+
+@pytest.fixture
+def temp_dir(monkeypatch, tmp_path):
+    monkeypatch.setattr(db.tempfile, "gettempdir", lambda: str(tmp_path))
+    return tmp_path
+
+
+def test_create_pool_writes_the_ca_certificate_from_the_environment_for_libpq(api_settings, temp_dir, monkeypatch):
+    # App Platform supplies the attached database's certificate as text; libpq reads it only from a file.
+    monkeypatch.setenv("DATABASE_CA_CERT", PEM)
+
+    create_pool()
+
+    path = Path(os.environ["PGSSLROOTCERT"])
+    assert path.parent == temp_dir
+    assert path.read_text() == PEM
+    assert path.stat().st_mode & 0o777 == 0o600
+
+
+def test_create_pool_leaves_the_certificate_file_alone_without_the_setting(api_settings, temp_dir, monkeypatch):
+    monkeypatch.setenv("PGSSLROOTCERT", "/etc/ssl/ca.crt")
+
+    create_pool()
+
+    assert os.environ["PGSSLROOTCERT"] == "/etc/ssl/ca.crt"
+    assert list(temp_dir.iterdir()) == []
+
+
+def test_create_pool_refuses_both_certificate_settings(api_settings, temp_dir, monkeypatch):
+    monkeypatch.setenv("DATABASE_CA_CERT", PEM)
+    monkeypatch.setenv("PGSSLROOTCERT", "/etc/ssl/ca.crt")
+
+    with pytest.raises(RuntimeError, match="not both"):
+        create_pool()
+
+
+def test_create_pool_refuses_a_certificate_setting_that_is_not_a_certificate(api_settings, temp_dir, monkeypatch):
+    # An unfilled App Platform placeholder, for example.
+    monkeypatch.setenv("DATABASE_CA_CERT", "${db.CA_CERT}")
+
+    with pytest.raises(RuntimeError, match="PEM certificate"):
+        create_pool()
+
+    assert "PGSSLROOTCERT" not in os.environ
