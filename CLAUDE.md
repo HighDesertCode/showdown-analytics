@@ -1,6 +1,6 @@
 # Project Overview
 
-Showdown Analytics collects and analyzes competitive Pokémon data from Smogon and Pokémon Showdown, starting with Gen 9 Monotype. It stores monthly statistics, reference data, public replays, and private research in PostgreSQL, and will expose source-attributed analytics through a public API and website (including for ChatGPT).
+Showdown Analytics collects and analyzes competitive Pokémon data from Smogon and Pokémon Showdown, starting with Gen 9 Monotype. It stores monthly statistics, reference data, public replays, and private research in PostgreSQL, and will expose source-attributed analytics through a public API and website (including for AI agents).
 
 See `REPORT.md` for research context and data interpretation. Always preserve source provenance, reporting periods, weighting baselines, team-type scopes, and metric denominators. Keep public replay samples distinct from ladder-wide statistics, and unknown battle information distinct from inferred facts.
 

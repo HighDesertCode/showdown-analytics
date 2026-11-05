@@ -1,6 +1,6 @@
 # Pokémon Showdown Monotype Analytics Research Report
 
-Research date: October 23, 2026. Scope: public Smogon monthly statistics, Pokémon Showdown reference data, public battle replays, and a proposed PostgreSQL foundation for LLM-assisted analytics. This report is research and design guidance; it does not implement an ingestion pipeline, database, or ChatGPT integration.
+Research date: October 23, 2026. Scope: public Smogon monthly statistics, Pokémon Showdown reference data, public battle replays, and a proposed PostgreSQL foundation for LLM-assisted analytics. This report is research and design guidance; it does not implement an ingestion pipeline, database, or AI agent integration.
 
 PostgreSQL is a good fit for this project. The proposed system combines three complementary datasets: monthly Smogon statistics, versioned Pokémon and format reference data, and individual battle replays. Together they support usage trends, team-building research, type matchup analysis, and retrieval of battle examples.
 
@@ -163,7 +163,7 @@ Initially index snapshot dimensions, species joins, replay IDs, battle dates, an
 
 Materialized views can accelerate repeated summaries, but their persisted results need refreshes and freshness metadata. [PostgreSQL materialized views](https://www.postgresql.org/docs/current/rules-materializedviews.html)
 
-**LLM access should use a documented analytical interface.** PostgreSQL storage alone does not connect ChatGPT. A later integration must expose database-backed tools or approved read-only queries. This report proposes the interface but does not choose or configure a particular ChatGPT integration.
+**LLM access should use a documented analytical interface.** PostgreSQL storage alone does not connect an AI agent. A later integration must expose database-backed tools or approved read-only queries. This report proposes the interface but does not choose or configure a particular AI agent integration.
 
 The intended flow is: question → resolve format, dates, baseline and scope → query PostgreSQL → return values, definitions and sources → generate an explanation.
 
