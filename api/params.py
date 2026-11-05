@@ -34,7 +34,7 @@ ReplayMonth = Annotated[
     Query(
         pattern=MONTH_PATTERN,
         description=(
-            "The month the replays were uploaded, as YYYY-MM. Defaults to the latest complete month, so the numbers"
+            "The UTC month the battles started, as YYYY-MM. Defaults to the latest complete month, so the numbers"
             " don't shift while you read them; ask for the current month to get its partial counts."
         ),
     ),
